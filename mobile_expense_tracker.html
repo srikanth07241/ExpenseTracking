@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Expense Tracker — Mobile</title>
+
+  <!-- Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
+  <style>
+    /* ------------------------
+       Theme variables (mobile-first)
+       ------------------------*/
+    :root{
+      --page-bg: #0b1220;
+      --card-bg: #0f1724;
+      --text-color: #e6eef6;
+      --heading-color: #ffffff;
+      --muted: #9aa4b2;
+      --card-border: rgba(255,255,255,0.03);
+      --thin-border: rgba(255,255,255,0.06);
+      --accent: #7c3aed;
+      --credit: #1f9f3f;
+      --debit: #7a0e0e;
+      --max-width:800px;
+
+      --control-height: 44px;
+      --gap:12px;
+      --radius:12px;
+    }
+
+    /* Light theme overrides */
+    body.light-theme{
+      --page-bg: linear-gradient(180deg,#f4f6fa 0%, #ffffff 100%);
+      --card-bg: #ffffff;
+      --text-color: #0b1720;
+      --heading-color: #0b1720;
+      --muted: #55606b;
+      --card-border: rgba(0,0,0,0.06);
+      --thin-border: rgba(0,0,0,0.08);
+      --accent: #4a65d6;
+      --credit: #0b7a3f;
+      --debit: #9b1e1e;
+    }
+
+    /* ------------------------
+       Base layout
+       ------------------------*/
+    *{box-sizing:border-box;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial}
+    html,body{height:100%;margin:0;background:var(--page-bg);color:var(--text-color);-webkit-font-smoothing:antialiased}
+    .wrap{max-width:var(--max-width);margin:12px auto;padding:12px}
+    header{display:flex;gap:12px;align-items:center}
+    .brand{flex:1}
+    h1{margin:0;font-size:20px;color:var(--heading-color)}
+    p.lead{margin:4px 0 0;color:var(--muted);font-size:13px}
+
+    /* ------------------------
+       Controls / uploader
+       ------------------------*/
+    .controls-bar{display:flex;gap:8px;align-items:center;margin-top:10px}
+    .file-uploader{display:flex;gap:8px;align-items:center}
+    /* hide native file */
+    #file-input{opacity:0;position:absolute;z-index:-1;width:1px;height:1px;border:0}
+    .custom-file-label{
+      display:inline-flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;
+      background:var(--card-bg);color:var(--text-color);border:1px solid var(--card-border);cursor:pointer;font-weight:600;
+      min-height:var(--control-height);font-size:14px;
+    }
+    #file-name{color:var(--muted);font-size:13px;min-width:120px;word-break:break-word}
+
+    .filter-toggle{
+      margin-left:auto;background:transparent;border:1px solid var(--card-border);padding:8px;border-radius:8px;color:var(--muted);cursor:pointer;
+    }
+
+    /* filter drawer */
+    .filters-drawer{display:none;margin-top:12px;background:var(--card-bg);border:1px solid var(--card-border);padding:12px;border-radius:10px}
+    .filters-row{display:flex;flex-wrap:wrap;gap:8px}
+    .filter-control{flex:1;min-width:120px;background:transparent;border-radius:8px;padding:6px}
+    input[type=text], input[type=date], input[type=number], select{
+      width:100%;padding:8px;border-radius:8px;border:1px solid var(--thin-border);background:transparent;color:var(--text-color);
+      min-height:var(--control-height);
+    }
+    .actions{display:flex;gap:8px;margin-top:10px}
+    .btn{background:linear-gradient(90deg,#6ee7b7,#34d399);color:#032;padding:10px 14px;border-radius:10px;border:none;cursor:pointer;font-weight:700;min-height:44px}
+    .clear-btn{background:transparent;border:1px solid var(--card-border);color:var(--text-color);padding:10px 12px;border-radius:10px;min-height:44px;cursor:pointer}
+    .export-pdf{background:var(--accent);color:#fff;padding:10px;border-radius:10px;border:none;cursor:pointer;min-height:44px}
+    .theme-toggle{background:transparent;border:1px solid var(--card-border);padding:10px;border-radius:10px;color:var(--muted);cursor:pointer;min-height:44px}
+
+    /* ------------------------
+       Top summaries + chart
+       ------------------------*/
+    .summaries{display:flex;gap:10px;flex-direction:column;margin-top:12px}
+    .summary-card{background:var(--card-bg);border:1px solid var(--card-border);padding:10px;border-radius:10px;color:var(--text-color)}
+    .summary-row{display:flex;gap:8px;flex-wrap:wrap}
+    .summary-item{flex:1;min-width:140px;background:linear-gradient(90deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));padding:10px;border-radius:8px}
+
+    .chart-card{margin-top:10px;background:var(--card-bg);border:1px solid var(--card-border);padding:10px;border-radius:10px}
+
+    /* ------------------------
+       Transactions: table on desktop, cards on mobile
+       ------------------------*/
+    .tx-section{margin-top:12px}
+    .tx-table{width:100%;border-collapse:collapse}
+    .tx-table th, .tx-table td{padding:10px;border-bottom:1px dashed var(--card-border);font-size:14px;color:var(--text-color);text-align:left}
+    .tx-table th{color:var(--muted);font-weight:700}
+    .amount.credit{color:var(--credit);font-weight:800}
+    .amount.debit{color:var(--debit);font-weight:800}
+
+    /* mobile cards */
+    .tx-cards{display:none;flex-direction:column;gap:10px}
+    .tx-card{
+      background:var(--card-bg);border:1px solid var(--card-border);padding:10px;border-radius:10px;color:var(--text-color);
+      display:flex;flex-direction:column;gap:6px;
+    }
+    .tx-card .row{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:14px}
+    .tx-card .remarks{color:var(--muted);font-size:13px;word-break:break-word}
+
+    /* footer */
+    footer{margin-top:16px;color:var(--muted);font-size:13px;text-align:center;padding-bottom:24px}
+
+    /* ------------------------
+       Responsive breakpoints
+       ------------------------*/
+    @media (min-width:700px){
+      .wrap{padding:16px}
+      .summaries{flex-direction:row}
+      .filters-drawer{display:block!important}
+      .filter-toggle{display:none}
+      .controls-bar{align-items:flex-end}
+      .chart-card canvas{height:300px !important}
+      .tx-table{display:table}
+      .tx-cards{display:none}
+      .filters-drawer{display:block}
+    }
+
+    @media (max-width:699px){
+      .top-actions{display:flex;gap:8px}
+      .chart-card canvas{height:180px !important}
+      .tx-table{display:none}
+      .tx-cards{display:flex}
+    }
+
+    /* avoid horizontal scroll */
+    html,body,.wrap{overflow-x:hidden}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <h1>Expense Tracker</h1>
+        <p class="lead">Mobile-optimized view — upload your XLS/XLSX (dd/mm/yyyy). Currency: INR.</p>
+      </div>
+
+      <div class="top-actions" style="display:flex;gap:8px;align-items:center">
+        <button id="theme-toggle" class="theme-toggle">Switch to Light Theme</button>
+        <button id="export-pdf" class="export-pdf" title="Export current filtered view">Export PDF</button>
+      </div>
+    </header>
+
+    <!-- controls -->
+    <div class="controls-bar">
+      <div class="file-uploader">
+        <label for="file-input" class="custom-file-label">📁 Select Excel File</label>
+        <span id="file-name">No file chosen</span>
+        <input id="file-input" type="file" accept=".xls,.xlsx" />
+      </div>
+
+      <button id="filter-toggle" class="filter-toggle" aria-expanded="false">Filters ▾</button>
+    </div>
+
+    <!-- drawer filters (collapsed on mobile) -->
+    <div id="filters" class="filters-drawer" aria-hidden="true">
+      <div class="filters-row">
+        <div style="flex:1"><label>From</label><input id="from-date" type="date" /></div>
+        <div style="flex:1"><label>To</label><input id="to-date" type="date" /></div>
+      </div>
+      <div class="filters-row" style="margin-top:8px">
+        <div style="flex:1"><label>Month</label><select id="month-select"><option value="">-- Select Month --</option></select></div>
+        <div style="flex:1"><label>Min (INR)</label><input id="min-amt" type="number" /></div>
+      </div>
+      <div class="filters-row" style="margin-top:8px">
+        <div style="flex:1"><label>Max (INR)</label><input id="max-amt" type="number" /></div>
+        <div style="flex:1"><label>Search Remarks</label><input id="search-remarks" type="text" placeholder="upi / rent / amazon" /></div>
+      </div>
+
+      <div class="actions" style="margin-top:10px">
+        <button id="apply-filters" class="btn">Apply</button>
+        <button id="clear-filters" class="clear-btn">Clear</button>
+      </div>
+    </div>
+
+    <!-- summaries + chart -->
+    <div class="summaries">
+      <div class="summary-card">
+        <div style="display:flex;justify-content:space-between;align-items:center"><strong>Monthly Spending</strong></div>
+        <div style="margin-top:8px;max-height:180px;overflow:auto">
+          <table id="monthly-table" class="tx-table"><thead><tr><th>Month</th><th style="text-align:right">Total</th></tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+
+      <div class="summary-card">
+        <div style="display:flex;justify-content:space-between;align-items:center"><strong>Avg Daily / month</strong></div>
+        <div style="margin-top:8px;max-height:180px;overflow:auto">
+          <table id="avg-table" class="tx-table"><thead><tr><th>Month</th><th style="text-align:right">Avg/day</th></tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+
+      <div class="summary-card" style="min-width:140px">
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div class="muted">Credits</div>
+          <div id="total-credits" style="font-weight:700">₹0</div>
+          <div class="muted" style="margin-top:8px">Debits</div>
+          <div id="total-debits" style="font-weight:700">₹0</div>
+          <div class="muted" style="margin-top:8px">Net</div>
+          <div id="net-total" style="font-weight:700">₹0</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <strong>Monthly Spendings — Visual</strong>
+      <div style="margin-top:10px">
+        <canvas id="monthly-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- Transactions -->
+    <div class="tx-section">
+      <h3 style="margin:10px 0 6px 0;color:var(--heading-color)">Credits (Deposits)</h3>
+
+      <!-- Table (desktop) -->
+      <div style="overflow:auto">
+        <table id="credits-table" class="tx-table"><thead><tr><th style="width:110px">Date</th><th style="width:120px">Amount</th><th>Remarks</th></tr></thead><tbody></tbody></table>
+      </div>
+
+      <!-- Cards (mobile) -->
+      <div id="credits-cards" class="tx-cards"></div>
+
+      <h3 style="margin:12px 0 6px 0;color:var(--heading-color)">Debits (Withdrawals)</h3>
+      <div style="overflow:auto">
+        <table id="debits-table" class="tx-table"><thead><tr><th style="width:110px">Date</th><th style="width:120px">Amount</th><th>Remarks</th></tr></thead><tbody></tbody></table>
+      </div>
+      <div id="debits-cards" class="tx-cards"></div>
+    </div>
+
+    <footer>Tip: Use Filters to refine results — Export PDF will capture the currently visible (filtered) summary and transactions.</footer>
+
+    <div id="printable-summary" style="display:none"></div>
+  </div>
+
+<script>
+/* ===========================
+   Utilities & State
+   =========================== */
+function parseDateDMY(str){
+  if(!str) return null;
+  if(str instanceof Date && !isNaN(str)) return str;
+  str = String(str).trim();
+  const m = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if(m){
+    let d = parseInt(m[1],10), mo = parseInt(m[2],10)-1, y = parseInt(m[3],10);
+    if(y < 100) y = 2000 + y;
+    const dt = new Date(y, mo, d);
+    if(!isNaN(dt)) return dt;
+  }
+  const dt2 = new Date(str);
+  if(!isNaN(dt2)) return dt2;
+  return null;
+}
+function formatINR(num){
+  if(num == null || num === '') return '';
+  const n = Number(num);
+  if(isNaN(n)) return '';
+  return '₹' + n.toLocaleString('en-IN', {maximumFractionDigits:2});
+}
+function monthKey(dt){ return dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0'); }
+function monthLabelFromKey(key){ const [y,m] = key.split('-').map(Number); return new Date(y,m-1,1).toLocaleString('en-GB',{month:'long',year:'numeric'}); }
+function daysInMonthFromKey(key){ const [y,m] = key.split('-').map(Number); return new Date(y,m,0).getDate(); }
+function totalColor(total){ if(total<15000) return '#35760A'; else if(total>=15000 && total<25000) return '#EF8652'; else if(total>=25000 && total<30000) return '#EF3C3C'; else return '#c0392b'; }
+function avgColor(avg){ if(avg<700) return '#35760A'; else if(avg>=700 && avg<1200) return '#EF8652'; else if(avg>=1200 && avg<1500) return '#EF3C3C'; else return '#c0392b'; }
+
+let transactions = []; // normalized {date, deposit, withdrawal, remarks}
+let filtered = [];
+let chartInstance = null;
+let currentTheme = 'dark';
+
+/* ===========================
+   Column detect & parse
+   =========================== */
+function detectColumns(headerRow){
+  const mapping={};
+  for(let i=0;i<headerRow.length;i++){
+    const h=String(headerRow[i]||'').toLowerCase().replace(/\s+/g,'');
+    if(/date/.test(h)) mapping.date=i;
+    if(/deposit|credit|depositamount|deposit_amt/.test(h)) mapping.deposit=i;
+    if(/withdrawal|debit|withdrawalamount|withdrawal_amt/.test(h)) mapping.withdrawal=i;
+    if(/remark|remarks|transactionremarks|narration|description/.test(h)) mapping.remarks=i;
+  }
+  return mapping;
+}
+function readWorkbookData(wb){
+  const firstSheet = wb.Sheets[wb.SheetNames[0]];
+  const json = XLSX.utils.sheet_to_json(firstSheet,{header:1,raw:true});
+  if(!json||json.length===0) return [];
+  const header = json[0];
+  const map = detectColumns(header);
+  const rows=[];
+  for(let r=1;r<json.length;r++){
+    const row=json[r];
+    if(!row) continue;
+    if(row.every(c=>c===undefined||c==='')) continue;
+    const rawDate = (map.date!==undefined)? row[map.date] : row[0];
+    let dt=null;
+    if(typeof rawDate==='number'){
+      const parsed = XLSX.SSF.parse_date_code(rawDate);
+      if(parsed) dt=new Date(parsed.y, parsed.m-1, parsed.d);
+    } else dt = parseDateDMY(rawDate);
+    const deposit = (map.deposit!==undefined)? row[map.deposit] : '';
+    const withdrawal = (map.withdrawal!==undefined)? row[map.withdrawal] : '';
+    const remarks = (map.remarks!==undefined)? row[map.remarks] : '';
+    rows.push({date:dt,deposit:deposit,withdrawal:withdrawal,remarks:String(remarks||'')});
+  }
+  return rows;
+}
+function normalizeRows(rows){
+  const out=[];
+  rows.forEach(r=>{
+    if(!r.date) return;
+    const d = (r.date instanceof Date)? r.date : parseDateDMY(r.date);
+    if(!d) return;
+    const deposit = Number(String(r.deposit||'').replace(/[^0-9.-]+/g,'')) || 0;
+    const withdrawal = Number(String(r.withdrawal||'').replace(/[^0-9.-]+/g,'')) || 0;
+    out.push({date:new Date(d.getFullYear(),d.getMonth(),d.getDate()), deposit, withdrawal, remarks: r.remarks||''});
+  });
+  return out.sort((a,b)=>a.date-b.date);
+}
+
+/* ===========================
+   Renderers
+   =========================== */
+function populateMonthSelect(){
+  const sel=document.getElementById('month-select'); sel.innerHTML='<option value="">-- Select Month --</option>';
+  const set=new Set(transactions.map(t=>monthKey(t.date)));
+  Array.from(set).sort().forEach(k=>{ const o=document.createElement('option'); o.value=k; o.textContent=monthLabelFromKey(k); sel.appendChild(o); });
+}
+
+function applyFiltersAndRender(){
+  const fromDate=document.getElementById('from-date').value? new Date(document.getElementById('from-date').value) : null;
+  const toDate=document.getElementById('to-date').value? new Date(document.getElementById('to-date').value) : null;
+  if(toDate) toDate.setHours(23,59,59,999);
+  const monthSel=document.getElementById('month-select').value;
+  const minAmt=Number(document.getElementById('min-amt').value)||null;
+  const maxAmt=Number(document.getElementById('max-amt').value)||null;
+  const search=(document.getElementById('search-remarks').value||'').toLowerCase();
+
+  filtered = transactions.filter(t=>{
+    if(fromDate && t.date < fromDate) return false;
+    if(toDate && t.date > toDate) return false;
+    if(monthSel){
+      const [y,m]=monthSel.split('-').map(Number);
+      if(!(t.date.getFullYear()===y && (t.date.getMonth()+1)===m)) return false;
+    }
+    const amt = t.deposit>0? t.deposit : (t.withdrawal>0 ? t.withdrawal : 0);
+    if(minAmt !== null && minAmt>0 && amt < minAmt) return false;
+    if(maxAmt !== null && maxAmt>0 && amt > maxAmt) return false;
+    if(search && !String(t.remarks||'').toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  renderTables();
+  renderMonthly();
+  renderAvg();
+  renderChart();
+  renderTotals();
+}
+
+/* render tables or mobile cards based on viewport width */
+function renderTables(){
+  const isMobile = window.innerWidth < 700;
+  const creditsT = document.querySelector('#credits-table tbody');
+  const debitsT = document.querySelector('#debits-table tbody');
+  const creditsCards = document.getElementById('credits-cards');
+  const debitsCards = document.getElementById('debits-cards');
+
+  creditsT.innerHTML=''; debitsT.innerHTML=''; creditsCards.innerHTML=''; debitsCards.innerHTML='';
+
+  filtered.forEach(t=>{
+    // credits
+    if(t.deposit && t.deposit>0){
+      if(isMobile){
+        const card=document.createElement('div'); card.className='tx-card';
+        card.innerHTML = `<div class="row"><div>${t.date.toLocaleDateString('en-GB')}</div><div class="amount credit">${formatINR(t.deposit)}</div></div>
+                          <div class="remarks">${t.remarks||''}</div>`;
+        creditsCards.appendChild(card);
+      } else {
+        const tr=document.createElement('tr');
+        tr.innerHTML = `<td>${t.date.toLocaleDateString('en-GB')}</td><td class="amount credit">${formatINR(t.deposit)}</td><td>${t.remarks||''}</td>`;
+        creditsT.appendChild(tr);
+      }
+    }
+    // debits
+    if(t.withdrawal && t.withdrawal>0){
+      if(isMobile){
+        const card=document.createElement('div'); card.className='tx-card';
+        card.innerHTML = `<div class="row"><div>${t.date.toLocaleDateString('en-GB')}</div><div class="amount debit">${formatINR(t.withdrawal)}</div></div>
+                          <div class="remarks">${t.remarks||''}</div>`;
+        debitsCards.appendChild(card);
+      } else {
+        const tr=document.createElement('tr');
+        tr.innerHTML = `<td>${t.date.toLocaleDateString('en-GB')}</td><td class="amount debit">${formatINR(t.withdrawal)}</td><td>${t.remarks||''}</td>`;
+        debitsT.appendChild(tr);
+      }
+    }
+  });
+}
+
+function renderMonthly(){
+  const map=new Map();
+  filtered.forEach(t=>{ const k=monthKey(t.date); if(!map.has(k)) map.set(k,0); map.set(k,map.get(k)+(t.withdrawal||0)); });
+  const tbody=document.querySelector('#monthly-table tbody'); tbody.innerHTML='';
+  Array.from(map.keys()).sort().forEach(k=>{
+    const total=map.get(k);
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td>${monthLabelFromKey(k)}</td><td style="text-align:right;color:${totalColor(total)}">${formatINR(total)}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderAvg(){
+  const map=new Map();
+  filtered.forEach(t=>{ const k=monthKey(t.date); if(!map.has(k)) map.set(k,0); map.set(k,map.get(k)+(t.withdrawal||0)); });
+  const tbody=document.querySelector('#avg-table tbody'); tbody.innerHTML='';
+  Array.from(map.keys()).sort().forEach(k=>{
+    const total=map.get(k); const days=daysInMonthFromKey(k); const avg = days>0? total/days:0;
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td>${monthLabelFromKey(k)}</td><td style="text-align:right;color:${avgColor(avg)}">${formatINR(avg)}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderTotals(){
+  const totalCredits = filtered.reduce((s,t)=>s+(t.deposit||0),0);
+  const totalDebits = filtered.reduce((s,t)=>s+(t.withdrawal||0),0);
+  document.getElementById('total-credits').textContent = formatINR(totalCredits);
+  document.getElementById('total-debits').textContent = formatINR(totalDebits);
+  document.getElementById('net-total').textContent = formatINR(totalCredits-totalDebits);
+}
+
+function renderChart(){
+  // draw horizontal bar chart (months vs total withdrawals)
+  const map=new Map();
+  filtered.forEach(t=>{ const k=monthKey(t.date); if(!map.has(k)) map.set(k,0); map.set(k,map.get(k)+(t.withdrawal||0)); });
+  const keys = Array.from(map.keys()).sort();
+  const labels = keys.map(k=>monthLabelFromKey(k));
+  const totals = keys.map(k=>map.get(k));
+  const colors = totals.map(total=> totalColor(total) );
+  const ctx=document.getElementById('monthly-chart').getContext('2d');
+  if(chartInstance) chartInstance.destroy();
+  chartInstance = new Chart(ctx, {
+    type:'bar',
+    data:{ labels, datasets:[{ data:totals, backgroundColor:colors, borderRadius:6, barThickness:18 }]},
+    options:{ indexAxis:'y', responsive:true, plugins:{legend:{display:false}}, scales:{ x:{ticks:{callback:(v)=>'₹'+Number(v).toLocaleString('en-IN')}}, y:{ticks:{autoSkip:false}} } }
+  });
+}
+
+/* ===========================
+   File input & UI bindings
+   =========================== */
+document.getElementById('file-input').addEventListener('change', function(e){
+  const f = e.target.files[0];
+  document.getElementById('file-name').textContent = f ? f.name : 'No file chosen';
+  if(!f) return;
+  const reader = new FileReader();
+  reader.onload = function(ev){
+    let wb;
+    try{ wb = XLSX.read(ev.target.result,{type:'binary'}); } catch(err){ alert('Failed to read file: '+err); return; }
+    const raw = readWorkbookData(wb);
+    transactions = normalizeRows(raw);
+    populateMonthSelect();
+    filtered = transactions.slice();
+    renderTables(); renderMonthly(); renderAvg(); renderChart(); renderTotals();
+  };
+  reader.readAsBinaryString(f);
+});
+
+/* filter toggle drawer */
+const filterToggle = document.getElementById('filter-toggle');
+const filtersDiv = document.getElementById('filters');
+filterToggle.addEventListener('click', ()=>{
+  const open = filtersDiv.style.display === 'block';
+  filtersDiv.style.display = open ? 'none' : 'block';
+  filterToggle.setAttribute('aria-expanded', String(!open));
+});
+
+/* filter buttons */
+document.getElementById('apply-filters').addEventListener('click', ()=>{ applyFiltersAndRender(); if(window.innerWidth<700) { filtersDiv.style.display='none'; filterToggle.setAttribute('aria-expanded','false'); } });
+document.getElementById('clear-filters').addEventListener('click', ()=>{
+  document.getElementById('from-date').value=''; document.getElementById('to-date').value=''; document.getElementById('month-select').value=''; document.getElementById('min-amt').value=''; document.getElementById('max-amt').value=''; document.getElementById('search-remarks').value='';
+  filtered = transactions.slice(); renderTables(); renderMonthly(); renderAvg(); renderChart(); renderTotals();
+});
+
+/* sample: helpful for testing - optional */
+function loadSample(){
+  const s=[]; const remarks=['upi food','grocery','salary','netflix','rent','atm','amazon','dining','travel','gift'];
+  for(let i=1;i<=90;i++){
+    const d = new Date(2025, Math.floor((i-1)/30), (i%28)+1);
+    const deposit = (i%15===0)? 50000 : (i%10===0? 15000 : 0);
+    const withdrawal = deposit>0 ? 0 : Math.round(Math.random()*3000);
+    s.push({date:new Date(d.getFullYear(),d.getMonth(),d.getDate()), deposit, withdrawal, remarks:remarks[i%remarks.length]});
+  }
+  transactions = s; populateMonthSelect(); filtered = transactions.slice(); renderTables(); renderMonthly(); renderAvg(); renderChart(); renderTotals();
+}
+// loadSample(); // uncomment only for testing
+
+/* ===========================
+   PDF export (captures filtered view)
+   =========================== */
+async function exportFilteredPDF(){
+  if(!filtered || filtered.length===0){ alert('No data to export'); return; }
+  const container = document.getElementById('printable-summary'); container.innerHTML='';
+
+  // Build printable content (monthly, avg, totals, transactions)
+  const title = document.createElement('h2'); title.textContent='Expense Summary'; container.appendChild(title);
+  const meta = document.createElement('div'); meta.textContent='Generated: '+new Date().toLocaleString('en-GB'); meta.style.marginBottom='8px'; container.appendChild(meta);
+
+  const map=new Map(); filtered.forEach(t=>{ const k=monthKey(t.date); if(!map.has(k)) map.set(k,0); map.set(k,map.get(k)+(t.withdrawal||0)); });
+  const mTitle=document.createElement('h3'); mTitle.textContent='Monthly Spending'; container.appendChild(mTitle);
+  const mTable=document.createElement('table'); mTable.style.width='100%'; mTable.innerHTML='<thead><tr><th>Month</th><th style="text-align:right">Total</th></tr></thead>'; const mb=document.createElement('tbody');
+  Array.from(map.keys()).sort().forEach(k=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${monthLabelFromKey(k)}</td><td style="text-align:right">${formatINR(map.get(k))}</td>`; mb.appendChild(tr); });
+  mTable.appendChild(mb); container.appendChild(mTable);
+
+  const aTitle=document.createElement('h3'); aTitle.textContent='Average Daily Spending'; container.appendChild(aTitle);
+  const aTable=document.createElement('table'); aTable.style.width='100%'; aTable.innerHTML='<thead><tr><th>Month</th><th style="text-align:right">Avg/day</th></tr></thead>'; const ab=document.createElement('tbody');
+  Array.from(map.keys()).sort().forEach(k=>{ const total=map.get(k); const days=daysInMonthFromKey(k); const avg=days>0?total/days:0; const tr=document.createElement('tr'); tr.innerHTML=`<td>${monthLabelFromKey(k)}</td><td style="text-align:right">${formatINR(avg)}</td>`; ab.appendChild(tr); });
+  aTable.appendChild(ab); container.appendChild(aTable);
+
+  const credits=filtered.reduce((s,t)=>s+(t.deposit||0),0); const debits=filtered.reduce((s,t)=>s+(t.withdrawal||0),0);
+  const totDiv=document.createElement('div'); totDiv.innerHTML=`<strong>Totals</strong><div>Total Credits: ${formatINR(credits)}</div><div>Total Debits: ${formatINR(debits)}</div><div>Net: ${formatINR(credits-debits)}</div>`; totDiv.style.marginTop='8px'; container.appendChild(totDiv);
+
+  const txTitle=document.createElement('h3'); txTitle.textContent='Transactions (filtered)'; container.appendChild(txTitle);
+  const txTable=document.createElement('table'); txTable.style.width='100%'; txTable.innerHTML='<thead><tr><th style="width:90px">Date</th><th style="width:110px">Deposit</th><th style="width:110px">Withdrawal</th><th>Remarks</th></tr></thead>';
+  const tb=document.createElement('tbody');
+  filtered.forEach(t=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${t.date.toLocaleDateString('en-GB')}</td><td style="text-align:right">${t.deposit?formatINR(t.deposit):''}</td><td style="text-align:right">${t.withdrawal?formatINR(t.withdrawal):''}</td><td>${t.remarks||''}</td>`; tb.appendChild(tr); });
+  txTable.appendChild(tb); container.appendChild(txTable);
+
+  container.style.display='block'; container.style.background='#fff'; container.style.color='#111'; container.style.padding='18px'; container.style.borderRadius='6px'; container.style.maxWidth='800px'; container.style.margin='20px auto';
+
+  const bigCanvas = await html2canvas(container, {scale:2, useCORS:true, allowTaint:true});
+  const pdf = new jspdf.jsPDF('p','pt','a4'); const pageW = pdf.internal.pageSize.getWidth(); const pageH = pdf.internal.pageSize.getHeight(); const margin=20; const pdfUsableWidth = pageW - margin*2;
+  const scale = pdfUsableWidth / bigCanvas.width; const scaledHeight = bigCanvas.height * scale; const pages = Math.ceil(scaledHeight / (pageH - margin*2));
+
+  for(let i=0;i<pages;i++){
+    const sliceCanvas = document.createElement('canvas'); const sCtx = sliceCanvas.getContext('2d');
+    const sliceWidth = bigCanvas.width; const sliceHeight = Math.floor((pageH - margin*2)/scale);
+    sliceCanvas.width = sliceWidth; sliceCanvas.height = sliceHeight;
+    sCtx.fillStyle = '#fff'; sCtx.fillRect(0,0,sliceCanvas.width,sliceCanvas.height);
+    sCtx.drawImage(bigCanvas, 0, i*sliceHeight, sliceWidth, sliceHeight, 0,0, sliceWidth, sliceHeight);
+    const imgData = sliceCanvas.toDataURL('image/jpeg',0.95);
+    const imgW = pdfUsableWidth; const imgH = sliceCanvas.height * scale;
+    if(i>0) pdf.addPage();
+    pdf.addImage(imgData,'JPEG',margin,margin,imgW,imgH);
+  }
+
+  pdf.save('expense-summary.pdf'); container.style.display='none';
+}
+document.getElementById('export-pdf').addEventListener('click', exportFilteredPDF);
+
+/* ===========================
+   Theme toggle
+   =========================== */
+function applyLightTheme(){
+  document.body.classList.add('light-theme'); currentTheme='light';
+  document.getElementById('theme-toggle').textContent='Switch to Dark Theme';
+  if(window.chartInstance) renderChart();
+}
+function applyDarkTheme(){
+  document.body.classList.remove('light-theme'); currentTheme='dark';
+  document.getElementById('theme-toggle').textContent='Switch to Light Theme';
+  if(window.chartInstance) renderChart();
+}
+document.getElementById('theme-toggle').addEventListener('click', ()=>{
+  if(currentTheme==='dark') applyLightTheme(); else applyDarkTheme();
+});
+
+/* ===========================
+   File name UI update (for custom uploader)
+   =========================== */
+document.getElementById('file-input').addEventListener('change', function(){
+  const fn = this.files && this.files[0] ? this.files[0].name : 'No file chosen';
+  document.getElementById('file-name').textContent = fn;
+});
+
+/* ===========================
+   Simple initialization
+   =========================== */
+transactions = []; filtered = []; // wait for user upload
+
+/* Re-render on resize (switch table/cards) */
+window.addEventListener('resize', ()=>{ renderTables(); });
+
+</script>
+</body>
+</html>
