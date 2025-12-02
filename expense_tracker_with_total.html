@@ -1,0 +1,339 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expense Tracker Dashboard - With Remarks Filter</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <style>
+        body { margin: 0; font-family: 'Segoe UI', sans-serif; background-color: #f4f6f9; }
+        .sidebar { width: 220px; background-color: #2c3e50; color: #ecf0f1; position: fixed; top: 0; bottom: 0; padding: 20px; }
+        .sidebar h2 { font-size: 1.5rem; margin-bottom: 20px; }
+        .sidebar a { display: block; color: #ecf0f1; text-decoration: none; margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .sidebar a:hover { background-color: #34495e; }
+        .main-content { margin-left: 240px; padding: 20px; }
+        .card { margin-bottom: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        h1 { font-weight: 700; margin-bottom: 20px; color: #2c3e50; }
+        .table th { background-color: #ecf0f1; }
+        .chart-container { height: 500px; }
+        
+        .btn-wide {
+            width: 500px; /* or any desired width */
+        }
+
+        .filter-input {
+            width: 220px; /* Adjust as needed */
+        }
+
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h2>Expense Tracker</h2>
+        <a href="#upload">Upload & Filters</a>
+        <a href="#summary">Summary</a>
+        <a href="#transactions">Transactions</a>
+    </div>
+
+    <div class="main-content">
+        <h1>Dashboard</h1>
+
+        <!-- Upload and Filters -->
+        <div id="upload" class="card p-3 bg-light">
+            <h5>Upload Transactions</h5>
+            <input class="form-control mb-3" type="file" id="fileUpload" accept=".xls,.xlsx">
+
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">From Date</label>
+                    <input type="date" id="fromDate" class="form-control">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">To Date</label>
+                    <input type="date" id="toDate" class="form-control">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Month</label>
+                    <select id="monthFilter" class="form-select">
+                        <option value="">All</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Min Amount</label>
+                    <input type="number" id="minAmount" class="form-control">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Max Amount</label>
+                    <input type="number" id="maxAmount" class="form-control">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Remarks</label>
+                    <input type="text" id="remarksFilter" class="form-control" placeholder="Enter text to search">
+                </div>
+            </div>
+            <div class="d-flex justify-content-center mt-4 mb-4 gap-3">
+                <button class="btn btn-primary btn-wide" onclick="applyFilters()">Apply Filters</button>
+                <button class="btn btn-secondary btn-wide" onclick="clearFilters()">Clear Filters</button>
+            </div>
+        </div>
+
+        <!-- Summary Section -->
+        <div id="summary" class="card p-3">
+            <h5>Summary</h5>
+            <div class="row">
+                <div class="col-md-4">
+                    <h6>Monthly Spending</h6>
+                    <table class="table table-bordered" id="monthlyTable">
+                        <thead><tr><th>Month</th><th>Total Spending (INR)</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="col-md-4">
+                    <h6>YTD</h6>
+                    <table class="table table-bordered" id="averageTable">
+                        <thead><tr><th>Period</th><th>Average Daily Spending</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="col-md-4">
+                    <h6> Monthly </h6>
+                    <table class="table table-bordered" id="avgMonthlyTable">
+                        <thead><tr><th>Month</th><th>Avg Daily Spending by Month</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="chart-container">
+                <canvas id="spendingChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Transactions Section -->
+        <div id="transactions" class="card p-3">
+            <h5>Credits</h5>
+            <table class="table table-striped" id="creditsTable">
+                <thead><tr><th>Date</th><th>Amount (INR)</th><th>Remarks</th></tr></thead>
+                <tbody></tbody>
+            </table>
+
+            <h5>Debits</h5>
+            <table class="table table-striped" id="debitsTable">
+                <thead><tr><th>Date</th><th>Amount (INR)</th><th>Remarks</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let transactions = [];
+        let chartInstance = null;
+
+        document.getElementById('fileUpload').addEventListener('change', handleFile);
+
+        function handleFile(e) {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const data = new Uint8Array(event.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheetName = workbook.SheetNames[0];
+                const sheet = workbook.Sheets[sheetName];
+                const json = XLSX.utils.sheet_to_json(sheet);
+                transactions = json.filter(row => row['S No.']);
+                applyFilters();
+                populateMonthFilter(transactions);
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function populateTables(data) {
+            const creditsBody = document.querySelector('#creditsTable tbody');
+            const debitsBody = document.querySelector('#debitsTable tbody');
+            creditsBody.innerHTML = '';
+            debitsBody.innerHTML = '';
+
+            data.forEach(row => {
+                const date = row['Transaction Date'];
+                const remarks = row['Transaction Remarks'];
+                const credit = parseFloat(row['Deposit Amount(INR)']) || 0;
+                const debit = parseFloat(row['Withdrawal Amount(INR)']) || 0;
+
+                if (credit > 0) {
+                    creditsBody.innerHTML += `<tr><td>${date}</td><td>${credit}</td><td>${remarks}</td></tr>`;
+                }
+                if (debit > 0) {
+                    debitsBody.innerHTML += `<tr><td>${date}</td><td>${debit}</td><td>${remarks}</td></tr>`;
+                }
+            });
+
+            calculateMonthlyStats(data);
+        }
+
+        function calculateMonthlyStats(data) {
+            const monthlyTotals = {};
+            let totalInRange = 0;
+            let minDate = null, maxDate = null;
+
+            data.forEach(row => {
+                const [d, m, y] = row['Transaction Date'].split('/');
+                const rowDate = new Date(`${y}-${m}-${d}`);
+                if (!minDate || rowDate < minDate) minDate = rowDate;
+                if (!maxDate || rowDate > maxDate) maxDate = rowDate;
+
+                const monthYear = `${m}-${y}`;
+                const debit = parseFloat(row['Withdrawal Amount(INR)']) || 0;
+                if (!monthlyTotals[monthYear]) monthlyTotals[monthYear] = 0;
+                monthlyTotals[monthYear] += debit;
+                totalInRange += debit;
+            });
+
+            const sortedMonths = Object.keys(monthlyTotals).sort((a,b)=>{
+                const [ma, ya] = a.split('-');
+                const [mb, yb] = b.split('-');
+                return new Date(`${ya}-${ma}-01`) - new Date(`${yb}-${mb}-01`);
+            });
+
+            const monthlyTableBody = document.querySelector('#monthlyTable tbody');
+            const averageTableBody = document.querySelector('#averageTable tbody');
+            const avgMonthlyTableBody = document.querySelector('#avgMonthlyTable tbody');
+            monthlyTableBody.innerHTML = '';
+            averageTableBody.innerHTML = '';
+            avgMonthlyTableBody.innerHTML = '';
+
+            const chartLabels = [];
+            const chartData = [];
+            const chartColors = [];
+
+            sortedMonths.forEach(month => {
+                // existing monthly rows logic
+                           const total = monthlyTotals[month];
+                           let color = '';
+                           if (total < 15000) color = '#35760A';
+                           else if (total >= 15000 && total < 25000) color = '#EF8652';
+                           else if (total >= 25000 && total < 30000) color = '#EF3C3C';
+                           else color = '#c0392b';
+            
+                           monthlyTableBody.innerHTML += `<tr><td>${month}</td><td style="color:${color};font-weight:bold;">${total.toFixed(2)}</td></tr>`;
+            
+                           const [m, y] = month.split('-');
+                           const daysInMonth = new Date(y, m, 0).getDate();
+                           const avgMonthly = total / daysInMonth;
+                           let avgColor = '';
+                           if (avgMonthly < 700) avgColor = '#35760A';
+                           else if (avgMonthly >= 700 && avgMonthly < 1200) avgColor = '#EF8652';
+                           else if (avgMonthly >= 1200 && avgMonthly < 1500) avgColor = '#EF3C3C';
+                           else avgColor = '#c0392b';
+            
+                           avgMonthlyTableBody.innerHTML += `<tr><td>${month}</td><td style="color:${avgColor};font-weight:bold;">${avgMonthly.toFixed(2)}</td></tr>`;
+            
+                           chartLabels.push(month);
+                           chartData.push(total);
+                           chartColors.push(color);
+                       });
+            
+                       if (minDate && maxDate) {
+                           const daysInRange = Math.floor((maxDate - minDate) / (1000 * 60 * 60 * 24)) + 1;
+                           const avgRange = totalInRange / daysInRange;
+                           let avgColor = '';
+                           if (avgRange < 700) avgColor = '#35760A';
+                           else if (avgRange >= 700 && avgRange < 1200) avgColor = '#EF8652';
+                           else if (avgRange >= 1200 && avgRange < 1500) avgColor = '#EF3C3C';
+                           else avgColor = '#c0392b';
+            
+                           averageTableBody.innerHTML += `<tr><td>${minDate.toLocaleDateString()} - ${maxDate.toLocaleDateString()}</td><td style="color:${avgColor};font-weight:bold;">${avgRange.toFixed(2)}</td></tr>`;
+                       }
+
+            
+            // ✅ Add Total Row
+            const grandTotal = Object.values(monthlyTotals).reduce((sum, val) => sum + val, 0);
+            monthlyTableBody.innerHTML += `
+                <tr style="font-weight:bold; background-color:#f8f9fa;">
+                    <td>Total</td>
+                    <td>${grandTotal.toFixed(2)}</td>
+                </tr>
+            `;
+renderChart(chartLabels, chartData, chartColors);
+        }
+
+        function renderChart(labels, data, colors) {
+            const ctx = document.getElementById('spendingChart').getContext('2d');
+            if (chartInstance) chartInstance.destroy();
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Total Spending (INR)',
+                        data: data,
+                        backgroundColor: colors
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { x: { beginAtZero: true }, y: { ticks: { autoSkip: false } } }
+                }
+            });
+        }
+
+        function populateMonthFilter(data) {
+            const months = new Set();
+            data.forEach(row => {
+                const dateParts = row['Transaction Date'].split('/');
+                months.add(`${dateParts[1]}-${dateParts[2]}`);
+            });
+            const monthSelect = document.getElementById('monthFilter');
+            months.forEach(month => {
+                monthSelect.innerHTML += `<option value="${month}">${month}</option>`;
+            });
+        }
+
+        function applyFilters() {
+            let filtered = transactions;
+            const fromDate = document.getElementById('fromDate').value;
+            const toDate = document.getElementById('toDate').value;
+            const month = document.getElementById('monthFilter').value;
+            const minAmount = parseFloat(document.getElementById('minAmount').value) || 0;
+            const maxAmount = parseFloat(document.getElementById('maxAmount').value) || Infinity;
+            const remarksText = document.getElementById('remarksFilter').value.toLowerCase();
+
+            filtered = filtered.filter(row => {
+                const [d, m, y] = row['Transaction Date'].split('/');
+                const rowDate = new Date(`${y}-${m}-${d}`);
+                let valid = true;
+
+                if (fromDate) valid = valid && rowDate >= new Date(fromDate);
+                if (toDate) valid = valid && rowDate <= new Date(toDate);
+                if (month) valid = valid && `${m}-${y}` === month;
+
+                const debit = parseFloat(row['Withdrawal Amount(INR)']) || 0;
+                valid = valid && (debit >= minAmount && debit <= maxAmount);
+
+                if (remarksText) {
+                    const remarks = (row['Transaction Remarks'] || '').toLowerCase();
+                    valid = valid && remarks.includes(remarksText);
+                }
+
+                return valid;
+            });
+
+            populateTables(filtered);
+        }
+
+        function clearFilters() {
+            document.getElementById('fromDate').value = '';
+            document.getElementById('toDate').value = '';
+            document.getElementById('monthFilter').value = '';
+            document.getElementById('minAmount').value = '';
+            document.getElementById('maxAmount').value = '';
+            document.getElementById('remarksFilter').value = '';
+            populateTables(transactions);
+        }
+    </script>
+</body>
+</html>
