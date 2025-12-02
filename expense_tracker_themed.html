@@ -1,0 +1,771 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Expense Tracker — Upload XLS</title>
+
+  <!-- Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
+  <style>
+    :root{
+      --page-bg: linear-gradient(180deg,#041223 0%, #071427 100%);
+      --card-bg: linear-gradient(180deg,#071427 0%, #071827 100%);
+      --text-color: #e6eef6;       /* default body text color (dark theme) */
+      --heading-color: #ffffff;    /* headings inside cards */
+      --muted: #9aa4b2;            /* table header / muted labels */
+      --card-border: rgba(255,255,255,0.03);
+      --thin-border: rgba(255,255,255,0.06);
+      --accent: #7c3aed;
+      --credit: #1f9f3f;
+      --debit: #7a0e0e;
+      --max-width:1100px;
+    }
+    *{box-sizing:border-box;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial}
+    html,body{height:100%;margin:0;background:var(--page-bg);color:#e6eef6;overflow-x:hidden}
+    .wrap{max-width:var(--max-width);margin:18px auto;padding:14px 16px}
+    header{display:flex;gap:12px;align-items:center}
+    .brand{display:flex;flex-direction:column;color: var(--text-color);}
+    h1{margin:0;font-size:30px}
+    p.lead{margin:4px 0 0;color:var(--muted);font-size:13px}
+
+    /* Controls */
+    .controls{display:flex;flex-wrap:wrap;gap:12px;margin-top:16px}
+    .control{background:rgba(255,255,255,0.02);padding:10px;border-radius:10px}
+    label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
+    input[type=text], input[type=date], input[type=number], select{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px 10px;border-radius:8px;color:var(--text-color);}
+    .actions{margin-left:auto;display:flex;gap:8px;align-items:center}
+    .btn{background:linear-gradient(90deg,#6ee7b7,#34d399);color:#032;padding:8px 12px;border-radius:8px;border:none;cursor:pointer;font-weight:600}
+    .clear-btn{background:#334155;color:#fff;padding:8px 12px;border-radius:8px;border:none;cursor:pointer}
+    .export-pdf{background:#2563eb;color:white;padding:8px 12px;border-radius:8px;border:none;cursor:pointer}
+    .theme-toggle{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px;border-radius:8px;color:var(--muted);cursor:pointer}
+
+	/* hide the native input */
+	#file-input {
+	  opacity: 0;
+	  width: 0.1px;
+	  height: 0.1px;
+	  position: absolute;
+	  z-index: -1;
+	}
+	
+	/* custom styled file button */
+	.custom-file-label {
+	  display: inline-flex;
+	  align-items: center;
+	  gap: 10px;
+	  padding: 10px 16px;
+	  background: var(--card-bg);
+	  color: var(--text-color);
+	  border: 1px solid var(--card-border);
+	  border-radius: 8px;
+	  cursor: pointer;
+	  font-weight: 600;
+	  font-size: 14px;
+	}
+	
+	/* file name */
+	#file-name {
+	  color: var(--muted);
+	  margin-left: 10px;
+	  font-size: 13px;
+	}
+    /* Top summary + chart */
+    .top-grid{display:grid;grid-template-columns:1fr 380px;gap:12px;margin-top:16px}
+    
+    /* card background and border now use variables */
+    .card{
+      background: var(--card-bg);
+      padding:12px;
+      border-radius:12px;
+      border:1px solid var(--card-border);
+      color: var(--text-color); /* ensure text inside card uses the correct color */
+    }
+    
+    /* summary row / small cards */
+    .summary-row{display:flex;gap:12px}
+    .summary-card{
+      flex:1;padding:10px;border-radius:10px;
+      background: linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      /* you can adjust the inner gradient to be theme-aware if needed */
+    }
+    
+    /* tables */
+    table{width:100%;border-collapse:collapse;table-layout:fixed}
+    th,td{
+      padding:8px;text-align:left;
+      border-bottom:1px dashed var(--card-border);
+      font-size:13px;
+      word-break:break-word;
+      color: var(--text-color); /* ensure table cells use the proper text color */
+    }
+    
+    /* table header uses the muted variable */
+    th{ color: var(--muted); font-weight:600 }
+    
+    /* explicit card heading styles so h3/h4 don't just inherit body color */
+    .card h3, .card h4 {
+      color: var(--heading-color);
+      margin: 6px 0;
+      font-weight:700;
+    }
+    
+    /* small muted label class */
+    .muted{ color: var(--muted); font-size:13px; }
+
+    /* stacked tables */
+    .tables{display:flex;flex-direction:column;gap:12px;margin-top:18px}
+    .table-card{background:var(--card-bg);padding:12px;color: var(--text-color);border-radius:12px;border:1px solid rgba(255,255,255,0.03)}
+    .amount.credit{color:var(--credit);font-weight:700}
+    .amount.debit{color:var(--debit);font-weight:700}
+
+    footer{margin-top:18px;color:var(--muted);font-size:13px}
+
+    /* printable summary hidden DOM*/
+    #printable-summary{display:none}
+
+    /* responsive */
+    @media (max-width:980px){
+      .top-grid{grid-template-columns:1fr}
+      .controls{gap:10px}
+    }
+
+    /* ensure no horizontal scroll */
+    html,body,.wrap{overflow-x:hidden}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <h1>Expense Tracker</h1>
+        <p class="lead">Upload XLS/XLSX. Dates must be <strong>dd/mm/yyyy</strong>. Currency: INR.</p>
+      </div>
+
+      <div class="actions">
+        <button id="theme-toggle" class="theme-toggle">Switch to Light Theme</button>
+        <button id="export-pdf" class="export-pdf">Export Filtered PDF</button>
+      </div>
+    </header>
+
+    <!-- Filters -->
+    <div class="controls" style="margin-top:14px">
+      <div class="control">
+        <label for="file-input" class="custom-file-label">📁 Select Excel File</label>
+        <span id="file-name">No file chosen</span>
+        <input id="file-input" type="file" accept=".xls,.xlsx" />
+      </div>
+
+      <div class="control">
+        <label>From Date</label>
+        <input id="from-date" type="date" />
+      </div>
+      <div class="control">
+        <label>To Date</label>
+        <input id="to-date" type="date" />
+      </div>
+      <div class="control">
+        <label>Month</label>
+        <select id="month-select"><option value="">-- Select Month (optional) --</option></select>
+      </div>
+      <div class="control">
+        <label>Min Amount (INR)</label>
+        <input id="min-amt" type="number" placeholder="0" />
+      </div>
+      <div class="control">
+        <label>Max Amount (INR)</label>
+        <input id="max-amt" type="number" placeholder="0" />
+      </div>
+
+      <div class="control" style="flex:1;min-width:220px">
+        <label>Search Remarks</label>
+        <input id="search-remarks" type="text" placeholder="Search remarks (case-insensitive)" />
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:flex-end">
+        <button id="apply-filters" class="btn">Apply Filters</button>
+        <button id="clear-filters" class="clear-btn">Clear Filters</button>
+      </div>
+    </div>
+
+    <!-- Top summaries and chart -->
+    <div class="top-grid">
+      <div class="card">
+        <div class="summary-row">
+          <div class="summary-card">
+            <h4 style="margin:6px 0">Monthly Spending</h4>
+            <div style="max-height:220px;overflow:auto">
+              <table id="monthly-table"><thead><tr><th>Month</th><th style="text-align:right">Total Spend</th></tr></thead><tbody></tbody></table>
+            </div>
+          </div>
+
+          <div class="summary-card">
+            <h4 style="margin:6px 0">Average Daily Spending</h4>
+            <div style="max-height:220px;overflow:auto">
+              <table id="avg-table"><thead><tr><th>Month</th><th style="text-align:right">Avg / day</th></tr></thead><tbody></tbody></table>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;display:flex;gap:12px">
+          <div style="flex:1" class="summary-card">
+            <div class="muted">Total Credits</div>
+            <div id="total-credits" style="font-weight:700;margin-top:6px">₹0</div>
+          </div>
+          <div style="flex:1" class="summary-card">
+            <div class="muted">Total Debits</div>
+            <div id="total-debits" style="font-weight:700;margin-top:6px">₹0</div>
+          </div>
+          <div style="flex:1" class="summary-card">
+            <div class="muted">Net</div>
+            <div id="net-total" style="font-weight:700;margin-top:6px">₹0</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h4 style="margin:6px 0">Monthly Spendings — Visual</h4>
+        <canvas id="monthly-chart" height="240"></canvas>
+      </div>
+    </div>
+
+    <!-- Transactions stacked: Credits top, Debits below -->
+    <div class="tables">
+      <div class="table-card">
+        <h3 style="margin-top:0">Credits (Deposits)</h3>
+        <div style="max-height:360px;overflow:auto;margin-top:8px">
+          <table id="credits-table"><thead><tr><th style="width:120px">Date</th><th style="width:140px">Amount</th><th>Remarks</th></tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <h3 style="margin-top:0">Debits (Withdrawals)</h3>
+        <div style="max-height:360px;overflow:auto;margin-top:8px">
+          <table id="debits-table"><thead><tr><th style="width:120px">Date</th><th style="width:140px">Amount</th><th>Remarks</th></tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      Tip: After uploading, apply filters and click Export Filtered PDF to download a printable copy of only the filtered view.
+    </footer>
+
+    <!-- Hidden element we use to build printable summary (populated on export) -->
+    <div id="printable-summary" style="display:none"></div>
+  </div>
+
+<script>
+// -----------------------------
+// Utilities
+// -----------------------------
+function parseDateDMY(str){
+  if(!str) return null;
+  if(str instanceof Date && !isNaN(str)) return str;
+  str = String(str).trim();
+  const m = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if(m){
+    let d = parseInt(m[1],10), mo = parseInt(m[2],10)-1, y = parseInt(m[3],10);
+    if(y < 100) y = 2000 + y;
+    const dt = new Date(y, mo, d);
+    if(!isNaN(dt)) return dt;
+  }
+  const dt2 = new Date(str);
+  if(!isNaN(dt2)) return dt2;
+  return null;
+}
+function formatINR(num){
+  if(num == null || num === '') return '';
+  const n = Number(num);
+  if(isNaN(n)) return '';
+  return '₹' + n.toLocaleString('en-IN', {maximumFractionDigits:2});
+}
+function monthKey(dt){ return dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0'); }
+function monthLabelFromKey(key){ const [y,m] = key.split('-').map(Number); return new Date(y, m-1, 1).toLocaleString('en-GB', {month:'long', year:'numeric'}); }
+function daysInMonthFromKey(key){ const [y,m] = key.split('-').map(Number); return new Date(y, m, 0).getDate(); }
+function totalColor(total){
+  if(total < 15000) return '#35760A';
+  else if(total >= 15000 && total < 25000) return '#EF8652';
+  else if(total >= 25000 && total < 30000) return '#EF3C3C';
+  else return '#c0392b';
+}
+function avgColor(avg){
+  if(avg < 700) return '#35760A';
+  else if(avg >= 700 && avg < 1200) return '#EF8652';
+  else if(avg >= 1200 && avg < 1500) return '#EF3C3C';
+  else return '#c0392b';
+}
+
+// -----------------------------
+// State
+// -----------------------------
+let transactions = []; // {date, deposit, withdrawal, remarks}
+let filtered = [];
+let chartInstance = null;
+let currentTheme = 'dark'; // 'dark' or 'light'
+
+// -----------------------------
+// Excel parsing
+// -----------------------------
+function detectColumns(headerRow){
+  const mapping = {};
+  for(let i=0;i<headerRow.length;i++){
+    const h = String(headerRow[i]||'').toLowerCase().replace(/\s+/g,'');
+    if(/date/.test(h)) mapping.date = i;
+    if(/deposit|credit|depositamount|deposit_amt/.test(h)) mapping.deposit = i;
+    if(/withdrawal|debit|withdrawalamount|withdrawal_amt/.test(h)) mapping.withdrawal = i;
+    if(/remark|remarks|transactionremarks|narration|description/.test(h)) mapping.remarks = i;
+  }
+  return mapping;
+}
+function readWorkbookData(wb){
+  const firstSheet = wb.Sheets[wb.SheetNames[0]];
+  const json = XLSX.utils.sheet_to_json(firstSheet, {header:1, raw:true});
+  if(!json || json.length === 0) return [];
+  const header = json[0];
+  const map = detectColumns(header);
+  const rows = [];
+  for(let r=1; r<json.length; r++){
+    const row = json[r];
+    if(!row) continue;
+    if(row.every(c => c === undefined || c === '')) continue;
+    const rawDate = (map.date !== undefined) ? row[map.date] : row[0];
+    let dt = null;
+    if(typeof rawDate === 'number'){
+      const parsed = XLSX.SSF.parse_date_code(rawDate);
+      if(parsed) dt = new Date(parsed.y, parsed.m-1, parsed.d);
+    } else {
+      dt = parseDateDMY(rawDate);
+    }
+    const deposit = (map.deposit !== undefined) ? row[map.deposit] : '';
+    const withdrawal = (map.withdrawal !== undefined) ? row[map.withdrawal] : '';
+    const remarks = (map.remarks !== undefined) ? row[map.remarks] : '';
+    rows.push({date:dt, deposit:deposit, withdrawal:withdrawal, remarks:String(remarks||'')});
+  }
+  return rows;
+}
+function normalize(rows){
+  const out = [];
+  rows.forEach(r=>{
+    if(!r.date) return;
+    const d = (r.date instanceof Date) ? r.date : parseDateDMY(r.date);
+    if(!d) return;
+    const deposit = Number(String(r.deposit||'').replace(/[^0-9.-]+/g,'')) || 0;
+    const withdrawal = Number(String(r.withdrawal||'').replace(/[^0-9.-]+/g,'')) || 0;
+    out.push({date: new Date(d.getFullYear(), d.getMonth(), d.getDate()), deposit, withdrawal, remarks: r.remarks || ''});
+  });
+  return out.sort((a,b)=>a.date-b.date);
+}
+
+// -----------------------------
+// Renderers
+// -----------------------------
+function populateMonthSelect(){
+  const sel = document.getElementById('month-select');
+  const set = new Set(transactions.map(t => monthKey(t.date)));
+  const arr = Array.from(set).sort();
+  sel.innerHTML = '<option value="">-- Select Month (optional) --</option>';
+  arr.forEach(k => {
+    const opt = document.createElement('option'); opt.value = k; opt.textContent = monthLabelFromKey(k);
+    sel.appendChild(opt);
+  });
+}
+
+function applyFiltersAndRender(){
+  const fromDate = document.getElementById('from-date').value ? new Date(document.getElementById('from-date').value) : null;
+  const toDate = document.getElementById('to-date').value ? new Date(document.getElementById('to-date').value) : null;
+  if(toDate) toDate.setHours(23,59,59,999);
+  const monthSel = document.getElementById('month-select').value;
+  const minAmt = Number(document.getElementById('min-amt').value) || null;
+  const maxAmt = Number(document.getElementById('max-amt').value) || null;
+  const search = (document.getElementById('search-remarks').value || '').toLowerCase();
+
+  filtered = transactions.filter(t=>{
+    if(fromDate && t.date < fromDate) return false;
+    if(toDate && t.date > toDate) return false;
+    if(monthSel){
+      const [y,m] = monthSel.split('-').map(Number);
+      if(!(t.date.getFullYear()===y && (t.date.getMonth()+1)===m)) return false;
+    }
+    const amt = t.deposit > 0 ? t.deposit : (t.withdrawal > 0 ? t.withdrawal : 0);
+    if(minAmt !== null && minAmt>0 && amt < minAmt) return false;
+    if(maxAmt !== null && maxAmt>0 && amt > maxAmt) return false;
+    if(search && !String(t.remarks||'').toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  renderTables();
+  renderMonthly();
+  renderAvg();
+  renderChart();
+  renderTotals();
+}
+
+function renderTables(){
+  const creditsT = document.querySelector('#credits-table tbody');
+  const debitsT = document.querySelector('#debits-table tbody');
+
+  creditsT.innerHTML = '';
+  debitsT.innerHTML = '';
+
+  filtered.forEach(t => {
+    // ---- Credits ----
+    if(t.deposit && t.deposit > 0){
+      const tr = document.createElement('tr');
+
+      tr.innerHTML = `
+        <td>${t.date.toLocaleDateString('en-GB')}</td>
+        <td><span class="amount credit">${formatINR(t.deposit)}</span></td>
+        <td>${t.remarks || ''}</td>
+      `;
+
+      creditsT.appendChild(tr);
+    }
+
+    // ---- Debits ----
+    if(t.withdrawal && t.withdrawal > 0){
+      const tr = document.createElement('tr');
+
+      tr.innerHTML = `
+        <td>${t.date.toLocaleDateString('en-GB')}</td>
+        <td><span class="amount debit">${formatINR(t.withdrawal)}</span></td>
+        <td>${t.remarks || ''}</td>
+      `;
+
+      debitsT.appendChild(tr);
+    }
+  });
+}
+
+function renderMonthly(){
+  const map = new Map();
+  filtered.forEach(t=>{
+    const key = monthKey(t.date);
+    if(!map.has(key)) map.set(key, 0);
+    map.set(key, map.get(key) + (t.withdrawal || 0));
+  });
+  const keys = Array.from(map.keys()).sort();
+  const tbody = document.querySelector('#monthly-table tbody'); tbody.innerHTML = '';
+  keys.forEach(k=>{
+    const total = map.get(k);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${monthLabelFromKey(k)}</td><td style="text-align:right;color:${totalColor(total)}">${formatINR(total)}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderAvg(){
+  const map = new Map();
+  filtered.forEach(t=>{
+    const key = monthKey(t.date);
+    if(!map.has(key)) map.set(key, 0);
+    map.set(key, map.get(key) + (t.withdrawal || 0));
+  });
+  const keys = Array.from(map.keys()).sort();
+  const tbody = document.querySelector('#avg-table tbody'); tbody.innerHTML = '';
+  keys.forEach(k=>{
+    const total = map.get(k);
+    const days = daysInMonthFromKey(k);
+    const avg = days>0 ? total / days : 0;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${monthLabelFromKey(k)}</td><td style="text-align:right;color:${avgColor(avg)}">${formatINR(avg)}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderTotals(){
+  const totalCredits = filtered.reduce((s,t)=>s + (t.deposit||0), 0);
+  const totalDebits = filtered.reduce((s,t)=>s + (t.withdrawal||0), 0);
+  document.getElementById('total-credits').textContent = formatINR(totalCredits);
+  document.getElementById('total-debits').textContent = formatINR(totalDebits);
+  document.getElementById('net-total').textContent = formatINR(totalCredits - totalDebits);
+}
+
+function renderChart(){
+  const map = new Map();
+  filtered.forEach(t=>{
+    const key = monthKey(t.date);
+    if(!map.has(key)) map.set(key, 0);
+    map.set(key, map.get(key) + (t.withdrawal || 0));
+  });
+  const keys = Array.from(map.keys()).sort();
+  const labels = keys.map(k => monthLabelFromKey(k));
+  const totals = keys.map(k => map.get(k));
+  const bgColors = totals.map(total => totalColor(total));
+
+  const ctx = document.getElementById('monthly-chart').getContext('2d');
+  if(chartInstance) chartInstance.destroy();
+  chartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ data: totals, backgroundColor: bgColors, borderRadius: 6, barThickness: 18 }] },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { callback: (v)=> '₹'+Number(v).toLocaleString('en-IN') } },
+        y: { ticks: { autoSkip:false } }
+      }
+    }
+  });
+}
+
+// -----------------------------
+// File input handling
+// -----------------------------
+document.getElementById('file-input').addEventListener('change', function(e){
+  const f = e.target.files[0];
+  if(!f) return;
+  const reader = new FileReader();
+  reader.onload = function(ev){
+    const data = ev.target.result;
+    let wb;
+    try{ wb = XLSX.read(data, {type:'binary'}); }
+    catch(err){ alert('Failed to read file: '+err); return; }
+    const raw = readWorkbookData(wb);
+    transactions = normalize(raw);
+    populateMonthSelect();
+    // default filtered set = all transactions
+    filtered = transactions.slice();
+    renderTables(); renderMonthly(); renderAvg(); renderChart(); renderTotals();
+  };
+  reader.readAsBinaryString(f);
+});
+
+// -----------------------------
+// Filters UI bindings
+// -----------------------------
+document.getElementById('apply-filters').addEventListener('click', ()=> applyFiltersAndRender());
+document.getElementById('clear-filters').addEventListener('click', ()=>{
+  document.getElementById('from-date').value = '';
+  document.getElementById('to-date').value = '';
+  document.getElementById('month-select').value = '';
+  document.getElementById('min-amt').value = '';
+  document.getElementById('max-amt').value = '';
+  document.getElementById('search-remarks').value = '';
+  filtered = transactions.slice();
+  renderTables(); renderMonthly(); renderAvg(); renderChart(); renderTotals();
+});
+
+// -----------------------------
+// Export filtered PDF (captures only filtered view)
+// -----------------------------
+async function exportFilteredPDF(){
+  if(!filtered || filtered.length === 0){ alert('No data to export. Apply filters or upload file.'); return; }
+
+  const container = document.getElementById('printable-summary');
+  container.innerHTML = ''; // clear
+
+  // Build a printable DOM that mirrors the current filtered view (so only filtered items get exported)
+  const title = document.createElement('h2'); title.textContent = 'Expense Summary'; title.style.marginBottom = '6px';
+  container.appendChild(title);
+
+  const meta = document.createElement('div'); meta.textContent = `Generated: ${new Date().toLocaleString('en-GB')}`; meta.style.marginBottom = '8px';
+  container.appendChild(meta);
+
+  // Monthly table
+  const map = new Map();
+  filtered.forEach(t => {
+    const k = monthKey(t.date);
+    if(!map.has(k)) map.set(k,0);
+    map.set(k, map.get(k) + (t.withdrawal||0));
+  });
+
+  const monthlyTitle = document.createElement('h3'); monthlyTitle.textContent = 'Monthly Spending'; container.appendChild(monthlyTitle);
+  const mTable = document.createElement('table'); mTable.style.width = '100%'; mTable.style.borderCollapse = 'collapse';
+  mTable.innerHTML = '<thead><tr><th style="text-align:left">Month</th><th style="text-align:right">Total Spend</th></tr></thead>';
+  const mb = document.createElement('tbody');
+  Array.from(map.keys()).sort().forEach(k => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${monthLabelFromKey(k)}</td><td style="text-align:right">${formatINR(map.get(k))}</td>`;
+    mb.appendChild(tr);
+  });
+  mTable.appendChild(mb);
+  container.appendChild(mTable);
+
+  // Average
+  const avgTitle = document.createElement('h3'); avgTitle.textContent = 'Average Daily Spending (per month)'; container.appendChild(avgTitle);
+  const aTable = document.createElement('table'); aTable.style.width='100%'; aTable.innerHTML = '<thead><tr><th style="text-align:left">Month</th><th style="text-align:right">Avg / day</th></tr></thead>';
+  const ab = document.createElement('tbody');
+  Array.from(map.keys()).sort().forEach(k => {
+    const total = map.get(k);
+    const days = daysInMonthFromKey(k);
+    const avg = days>0 ? (total/days) : 0;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${monthLabelFromKey(k)}</td><td style="text-align:right">${formatINR(avg)}</td>`;
+    ab.appendChild(tr);
+  });
+  aTable.appendChild(ab);
+  container.appendChild(aTable);
+
+  // Totals
+  const credits = filtered.reduce((s,t)=>s + (t.deposit||0), 0);
+  const debits = filtered.reduce((s,t)=>s + (t.withdrawal||0), 0);
+  const totalsDiv = document.createElement('div');
+  totalsDiv.style.marginTop = '8px';
+  totalsDiv.innerHTML = `<strong>Totals</strong><div>Total Credits: ${formatINR(credits)}</div><div>Total Debits: ${formatINR(debits)}</div><div>Net: ${formatINR(credits - debits)}</div>`;
+  container.appendChild(totalsDiv);
+
+  // Transactions (combined)
+  const txTitle = document.createElement('h3'); txTitle.textContent = 'Transactions (filtered)'; txTitle.style.marginTop = '12px';
+  container.appendChild(txTitle);
+  const txTable = document.createElement('table'); txTable.style.width='100%';
+  txTable.innerHTML = '<thead><tr><th style="width:90px">Date</th><th style="width:110px">Deposit</th><th style="width:110px">Withdrawal</th><th>Remarks</th></tr></thead>';
+  const tb = document.createElement('tbody');
+  filtered.forEach(t => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${t.date.toLocaleDateString('en-GB')}</td><td style="text-align:right">${t.deposit?formatINR(t.deposit):''}</td><td style="text-align:right">${t.withdrawal?formatINR(t.withdrawal):''}</td><td>${t.remarks||''}</td>`;
+    tb.appendChild(tr);
+  });
+  txTable.appendChild(tb);
+  container.appendChild(txTable);
+
+  // Make visible so html2canvas can capture it
+  container.style.display = 'block';
+  container.style.background = '#fff';
+  container.style.color = '#111';
+  container.style.padding = '18px';
+  container.style.borderRadius = '6px';
+  container.style.maxWidth = '800px';
+  container.style.margin = '20px auto';
+
+  // Capture the printable container to a canvas
+  const bigCanvas = await html2canvas(container, { scale: 2, useCORS: true, allowTaint: true });
+
+  // Build a multi-page PDF by slicing the big canvas into page-sized images
+  const pdf = new jspdf.jsPDF('p', 'pt', 'a4');
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const margin = 20;
+  const pdfUsableWidth = pageWidth - margin * 2;
+
+  // scale factor to fit canvas width to pdf usable width
+  const scale = pdfUsableWidth / bigCanvas.width;
+  const scaledHeight = bigCanvas.height * scale;
+
+  // Calculate how many pages needed
+  const pages = Math.ceil(scaledHeight / (pageHeight - margin * 2));
+
+  for(let i = 0; i < pages; i++){
+    // create a canvas for each page slice
+    const sliceCanvas = document.createElement('canvas');
+    const sCtx = sliceCanvas.getContext('2d');
+
+    // width in original canvas pixels, height per page in original canvas pixels
+    const sliceWidth = bigCanvas.width;
+    const sliceHeight = Math.floor((pageHeight - margin * 2) / scale);
+
+    sliceCanvas.width = sliceWidth;
+    sliceCanvas.height = sliceHeight;
+
+    // draw portion from bigCanvas to sliceCanvas
+    sCtx.fillStyle = '#fff';
+    sCtx.fillRect(0,0,sliceCanvas.width,sliceCanvas.height);
+    sCtx.drawImage(bigCanvas, 0, i * sliceHeight, sliceWidth, sliceHeight, 0,0, sliceWidth, sliceHeight);
+
+    const imgData = sliceCanvas.toDataURL('image/jpeg', 0.95);
+    const imgW = pdfUsableWidth;
+    const imgH = sliceCanvas.height * scale;
+    const x = margin;
+    const y = margin;
+
+    if(i > 0) pdf.addPage();
+    pdf.addImage(imgData, 'JPEG', x, y, imgW, imgH);
+  }
+
+  pdf.save('expense-summary.pdf');
+
+  // hide printable container again
+  container.style.display = 'none';
+}
+
+// -----------------------------
+// Theme toggle (dark <-> light)
+// -----------------------------
+function applyLightTheme(){
+  // Add a class so any CSS selectors depending on body.light-theme work
+  document.body.classList.add('light-theme');
+
+  // Page / card backgrounds
+  document.documentElement.style.setProperty('--page-bg', 'linear-gradient(180deg,#f4f6fa 0%, #ffffff 100%)');
+  document.documentElement.style.setProperty('--card-bg', '#ffffff');
+
+  // Text & heading colors (dark on light background)
+  document.documentElement.style.setProperty('--text-color', '#0b1720');
+  document.documentElement.style.setProperty('--heading-color', '#0b1720');
+
+  // Muted / less prominent text
+  document.documentElement.style.setProperty('--muted', '#55606b');
+
+  // Borders (darker subtle borders for light theme)
+  document.documentElement.style.setProperty('--card-border', 'rgba(0,0,0,0.06)');
+  document.documentElement.style.setProperty('--thin-border', 'rgba(0,0,0,0.08)');
+
+  // Accent and amount colors (readable on light bg)
+  document.documentElement.style.setProperty('--accent', '#4a65d6');
+  document.documentElement.style.setProperty('--credit', '#0b7a3f');
+  document.documentElement.style.setProperty('--debit', '#9b1e1e');
+
+  // Button label and state
+  const btn = document.getElementById('theme-toggle');
+  if(btn) btn.textContent = 'Switch to Dark Theme';
+  currentTheme = 'light';
+
+  // Re-render chart so any color-dependent rendering updates
+  if(window.chartInstance) renderChart();
+}
+
+function applyDarkTheme(){
+  // Remove light-theme class
+  document.body.classList.remove('light-theme');
+
+  // Dark theme defaults
+  document.documentElement.style.setProperty('--page-bg', 'linear-gradient(180deg,#041223 0%, #071427 100%)');
+  document.documentElement.style.setProperty('--card-bg', 'linear-gradient(180deg,#071427 0%, #071827 100%)');
+
+  // Text & heading colors (light on dark background)
+  document.documentElement.style.setProperty('--text-color', '#e6eef6');
+  document.documentElement.style.setProperty('--heading-color', '#ffffff');
+
+  // Muted / less prominent text
+  document.documentElement.style.setProperty('--muted', '#9aa4b2');
+
+  // Borders (light subtle borders for dark theme)
+  document.documentElement.style.setProperty('--card-border', 'rgba(255,255,255,0.03)');
+  document.documentElement.style.setProperty('--thin-border', 'rgba(255,255,255,0.06)');
+
+  // Accent and amount colors for dark bg
+  document.documentElement.style.setProperty('--accent', '#7c3aed');
+  document.documentElement.style.setProperty('--credit', '#1f9f3f');
+  document.documentElement.style.setProperty('--debit', '#7a0e0e');
+
+  // Button label and state
+  const btn = document.getElementById('theme-toggle');
+  if(btn) btn.textContent = 'Switch to Light Theme';
+  currentTheme = 'dark';
+
+  // Re-render chart
+  if(window.chartInstance) renderChart();
+}
+document.getElementById('theme-toggle').addEventListener('click', ()=>{
+  if(currentTheme === 'dark') applyLightTheme();
+  else applyDarkTheme();
+});
+
+// -----------------------------
+// Bind export button
+// -----------------------------
+document.getElementById('export-pdf').addEventListener('click', exportFilteredPDF);
+
+// -----------------------------
+// Initialize (empty)
+// -----------------------------
+transactions = [];
+filtered = [];
+
+</script>
+</body>
+</html>
