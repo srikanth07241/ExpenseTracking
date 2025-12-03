@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<title>Expense Tracker — Updated (Mobile Fixes)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Expense Tracker — Updated</title>
 
 <!-- libs -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -49,20 +49,7 @@
     margin: 0;
   }
 
-  /* --- MOBILE / SCROLL FIXES (minimal, non-invasive) --- */
-  html,body{
-    margin:0;height:100%;background:var(--bg);color:var(--text);
-    overflow-x:hidden; /* prevent horizontal page scroll */
-    -webkit-text-size-adjust:100%;
-  }
-  /* Ensure inputs are not smaller than 16px to avoid iOS zoom on focus */
-  input, select, textarea { font-size:16px }
-
-  /* Make tables scroll inside their card instead of causing page overflow */
-  .card table{ display:block; overflow-x:auto; width:100%; }
-  th,td{ padding:8px; border-bottom:1px solid rgba(0,0,0,0.04); font-size:13px; color:var(--text); text-align:left; word-break:break-word; white-space:normal }
-
-  /* keep rest of original styling unchanged */
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text)}
   .wrap{max-width:1100px;margin:20px auto;padding:18px}
   header{display:flex;align-items:center;gap:12px}
   h1{margin:0;font-size:20px}
@@ -90,9 +77,22 @@
     box-sizing: border-box;
   }
   .controls .control label { font-size:12px; margin-bottom:6px; color:var(--muted); }
-  .controls input[type="text"], .controls input[type="date"], .controls input[type="number"], .controls select { height:30px; line-height:30px; padding:4px 8px; border-radius:6px; border:1px solid var(--card-border); background:transparent; color:var(--text); }
+  .controls input[type="text"], .controls input[type="date"], .controls input[type="number"], .controls select { height:36px; line-height:36px; padding:6px 8px; border-radius:6px; border:1px solid var(--card-border); background:transparent; color:var(--text); }
   .controls .control.full { min-width: 260px; height:auto; padding-bottom:10px }
-  .controls .btn, .controls .btn.secondary { height:38px; align-self:center; margin-top:0 }
+  .controls .btn, .controls .btn.secondary { height:40px; min-width:100px; align-self:center; margin-top:0 }
+
+  /* Mobile adjustments: keep layout same but make controls uniform and full-width */
+  @media (max-width:780px){
+    .controls{flex-direction:column;align-items:stretch;gap:8px}
+    .controls .control{width:100%;min-width:unset;height:auto;padding:8px 10px}
+    .controls .control.full{min-width:unset}
+    .controls input[type="text"], .controls input[type="date"], .controls input[type="number"], .controls select{height:44px;font-size:16px;padding:8px 10px}
+    .file-wrap{flex-direction:column;align-items:stretch}
+    .file-label{display:block;width:100%;text-align:center}
+    #file-name{display:block;margin-top:8px;white-space:normal;overflow:hidden;text-overflow:ellipsis}
+    /* ensure action buttons stay side-by-side but centered */
+    .controls > div:last-child{display:flex;gap:8px;justify-content:flex-start}
+  }
 
   .top-charts{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:18px}
   .card{background:var(--surface);border-radius:12px;padding:12px;border:1px solid var(--card-border);box-shadow:var(--shadow)}
@@ -105,6 +105,7 @@
   .transactions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
 
   table{width:100%;border-collapse:collapse}
+  th,td{padding:8px;border-bottom:1px solid rgba(0,0,0,0.04);font-size:13px;color:var(--text);text-align:left}
   thead th{color:var(--muted);font-weight:600;background:linear-gradient(90deg,rgba(0,0,0,0.02),transparent)}
   .amount.credit{color:var(--success);font-weight:700}
   .amount.debit{color:var(--danger);font-weight:700}
