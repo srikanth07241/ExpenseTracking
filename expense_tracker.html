@@ -64,6 +64,26 @@ h1{margin:0;font-size:20px}
   text-align:left;
 }
 
+/* Make pie dropdowns match Daily-month select styling */
+#ytd-pie-mode,
+#monthly-pie-mode,
+#monthly-pie-month {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--card-border);
+  background: transparent;
+  color: var(--text);
+  box-sizing: border-box;
+  height: 44px;
+  font-size: 14px;
+  -webkit-appearance: none; /* removes default arrow styling in some browsers */
+  appearance: none;
+}
+
+/* If you want a small arrow icon on the right (optional), add this wrapper in HTML or use background-image */
+#monthly-pie-month { min-width: 160px; } /* ensure it doesn't get truncated */
+
 /* field container stretches */
 .control-box .field{ flex:1; min-width:0 }
 
@@ -131,7 +151,7 @@ h1{margin:0;font-size:20px}
 .top-charts{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:18px}
 .card{background:var(--surface);border-radius:12px;padding:12px;border:1px solid var(--card-border);box-shadow:var(--shadow)}
 .card h3{margin:0;font-size:14px}
-.chart-frame{width:100%;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;margin-top:8px}
+.chart-frame{width:100%;height: 200px;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;margin-top:8px}
 .pie-chart-frame{width:75%;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;margin-top:8px}
 
 .pie-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
@@ -471,7 +491,73 @@ function renderAvgTable(){ const map=new Map(); filtered.forEach(t=>{ const k=mo
 function renderTotals(){ const credits=filtered.reduce((s,t)=>s+(t.deposit||0),0); const debits=filtered.reduce((s,t)=>s+(t.withdrawal||0),0); document.getElementById('total-credits').textContent=formatINR(credits); document.getElementById('total-debits').textContent=formatINR(debits); document.getElementById('net-total').textContent=formatINR(credits-debits); }
 function firstMonthKeyInFiltered(){ if(!filtered.length) return ''; const s=new Set(filtered.map(t=>monthKey(t.date))); const arr=Array.from(s).sort(); return arr[0]||''; }
 
-function renderMonthlyChart(){ const map=new Map(); filtered.forEach(t=>{ const k=monthKey(t.date); map.set(k,(map.get(k)||0)+(t.withdrawal||0)); }); const keys=Array.from(map.keys()).sort(); const labels=keys.map(k=>monthLabelFromKey(k)); const totals=keys.map(k=>map.get(k)); const colors=totals.map(total=>totalColor(total)); const ctx=document.getElementById('monthly-chart').getContext('2d'); destroyIfExists(monthlyChart); monthlyChart = new Chart(ctx,{type:'bar',data:{labels,datasets:[{data:totals,backgroundColor:colors}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'₹'+Number(v).toLocaleString('en-IN')}},y:{ticks:{autoSkip:false}}}}}); }
+function renderMonthlyChart(){
+  // build totals per month (same logic you already have)
+  const map = new Map();
+  filtered.forEach(t=>{
+    const k = monthKey(t.date);
+    map.set(k, (map.get(k) || 0) + (t.withdrawal || 0));
+  });
+  const keys = Array.from(map.keys()).sort();
+  const labels = keys.map(k => monthLabelFromKey(k));
+  const totals = keys.map(k => map.get(k) || 0);
+  const pointColors = totals.map(total => totalColor(total));
+  const lineColor = '#4AA3FF';
+
+  // keep existing container (no resizing of outer frame) but ensure canvas fills it
+  const container = document.querySelector('.chart-frame');
+  const canvas = document.getElementById('monthly-chart');
+  canvas.style.width = '100%';
+  // try to keep a decent visible height; do not force huge sizes
+  if(!canvas.style.height || canvas.style.height === '') canvas.style.height = (container && container.clientHeight ? container.clientHeight : 220) + 'px';
+
+  // destroy previous chart if exists
+  if(monthlyChart){ monthlyChart.destroy(); monthlyChart = null; }
+
+  // create a line chart — horizontal feel is retained by labeling y axis with months (but Chart.js draws x-axis numeric)
+  monthlyChart = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Total Spend (INR)',
+        data: totals,
+        borderColor: lineColor,
+        borderWidth: 2.5,
+        tension: 0.25,
+        fill: false,
+        pointRadius: 6,
+        pointHoverRadius: 8,
+        // color each point according to totalColor
+        pointBackgroundColor: pointColors,
+        pointBorderColor: pointColors,
+        pointBorderWidth: 1.5,
+        // draw small area under line optionally (set to transparent if you don't want)
+        backgroundColor: 'rgba(74,163,255,0.07)'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(ctx){ return '₹' + Number(ctx.parsed.y || ctx.parsed).toLocaleString('en-IN'); } } } },
+      scales: {
+        x: {
+          ticks: { autoSkip: false },
+          grid: { display: false },
+          title: { display: false }
+        },
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: function(v){ return v >= 1000 ? '₹' + Number(v).toLocaleString('en-IN') : '₹' + v; }
+          },
+          grid: { color: 'rgba(255,255,255,0.04)' }
+        }
+      },
+      layout: { padding: { top: 8, bottom: 8, left: 6, right: 6 } }
+    }
+  });
+}
 
 function renderDailyChart(monthKeyValue){ const pick = monthKeyValue || document.getElementById('daily-month-select')?.value || firstMonthKeyInFiltered(); if(!pick){ destroyIfExists(dailyChart); return; } const [y,m]=pick.split('-').map(Number); const days=new Date(y,m,0).getDate(); const dayTotals=Array(days).fill(0); filtered.forEach(t=>{ if(t.date.getFullYear()===y && (t.date.getMonth()+1)===m) dayTotals[t.date.getDate()-1]+= (t.withdrawal||0); }); const labels=Array.from({length:days},(_,i)=>String(i+1)); const ctx=document.getElementById('daily-chart').getContext('2d'); destroyIfExists(dailyChart); dailyChart = new Chart(ctx,{type:'line',data:{labels,datasets:[{data:dayTotals,label:monthLabelFromKey(pick),borderColor:'#FF7A59',backgroundColor:'#FF7A5933',fill:true,tension:0.25}]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'₹'+Number(v).toISOString? Number(v).toLocaleString('en-IN') : v}}}}}); }
 
