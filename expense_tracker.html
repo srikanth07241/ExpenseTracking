@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Expense Tracker — Updated</title>
+
+<!-- libs -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --bg: linear-gradient(180deg,#041223 0%, #071427 100%);
+    --surface: linear-gradient(180deg,#071427 0%, #071827 100%);
+    --muted: #9aa4b2;
+    --text: #e6eef6;
+    --accent:#7c3aed;
+    --success:#1f9f3f;
+    --danger:#7a0e0e;
+    --card-border: rgba(255,255,255,0.04);
+    --file-bg: rgba(255,255,255,0.02);
+    --shadow: 0 8px 28px rgba(2,6,23,0.5);
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  }
+  .light{
+    --bg: linear-gradient(180deg,#ffffff 0%, #f5f7fb 100%);
+    --surface: #fff;
+    --muted: #6b7280;
+    --text: #0b1220;
+    --card-border: rgba(0,0,0,0.06);
+    --file-bg: rgba(0,0,0,0.02);
+    --shadow: 0 10px 30px rgba(12,20,30,0.06);
+  }
+  /* Hide default ugly file input; custom label will trigger the file picker */
+  input[type="file"] {
+    position: absolute;
+    left: -9999px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+    padding: 0;
+    margin: 0;
+  }
+
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text)}
+  .wrap{max-width:1100px;margin:20px auto;padding:18px}
+  header{display:flex;align-items:center;gap:12px}
+  h1{margin:0;font-size:20px}
+  .lead{color:var(--muted);font-size:13px;margin-top:4px}
+
+  .controls{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;align-items:flex-end}
+  .control{background:var(--file-bg);padding:10px;border-radius:10px;border:1px solid var(--card-border);min-width:120px}
+  label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+  input,select{background:transparent;border:1px solid rgba(0,0,0,0.06);color:var(--text);padding:8px;border-radius:8px}
+  .btn{background:linear-gradient(90deg,#6ee7b7,#34d399);color:#032;padding:8px 12px;border-radius:8px;border:none;cursor:pointer;font-weight:600}
+  .btn.secondary{background:transparent;border:1px solid var(--card-border);color:var(--text);padding:8px 12px;border-radius:8px}
+
+  .file-wrap{display:flex;align-items:center;gap:8px}
+  .file-label{padding:10px 14px;border-radius:10px;background:var(--surface);border:1px solid var(--card-border);cursor:pointer;font-weight:700}
+  #file-name{color:var(--muted);font-size:13px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* uniform control sizes */
+  .controls .control {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 140px;
+    height: 48px;
+    padding: 6px 10px;
+    box-sizing: border-box;
+  }
+  .controls .control label { font-size:12px; margin-bottom:6px; color:var(--muted); }
+  .controls input[type="text"], .controls input[type="date"], .controls input[type="number"], .controls select { height:30px; line-height:30px; padding:4px 8px; border-radius:6px; border:1px solid var(--card-border); background:transparent; color:var(--text); }
+  .controls .control.full { min-width: 260px; height:auto; padding-bottom:10px }
+  .controls .btn, .controls .btn.secondary { height:38px; align-self:center; margin-top:0 }
+
+  .top-charts{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:18px}
+  .card{background:var(--surface);border-radius:12px;padding:12px;border:1px solid var(--card-border);box-shadow:var(--shadow)}
+  .card h3{margin:0;font-size:14px}
+  .chart-frame{width:100%;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;margin-top:8px}
+  .pie-chart-frame{width:75%;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;margin-top:8px}
+
+  .pie-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+  .summary-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+  .transactions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:8px;border-bottom:1px solid rgba(0,0,0,0.04);font-size:13px;color:var(--text);text-align:left}
+  thead th{color:var(--muted);font-weight:600;background:linear-gradient(90deg,rgba(0,0,0,0.02),transparent)}
+  .amount.credit{color:var(--success);font-weight:700}
+  .amount.debit{color:var(--danger);font-weight:700}
+
+  @media (max-width:1100px){ .top-charts{grid-template-columns:1fr} .pie-row{grid-template-columns:1fr} .summary-row{grid-template-columns:1fr} .transactions{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+  <div class="wrap" id="app">
+    <header>
+      <div>
+        <h1>Expense Tracker</h1>
+        <div class="lead">Upload XLS/XLSX — Dates dd/mm/yyyy — Currency INR</div>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        <button id="theme-toggle" class="btn secondary">Toggle Theme</button>
+        <button id="export-pdf" class="btn secondary">Export PDF</button>
+      </div>
+    </header>
+
+    <div class="controls">
+      <div class="control file-wrap full">
+        <label class="file-label" for="file-input">📁 Choose file</label>
+        <input id="file-input" type="file" accept=".xls,.xlsx" />
+        <span id="file-name">No file chosen</span>
+      </div>
+
+      <div class="control"><label>From</label><input id="from-date" type="date" /></div>
+      <div class="control"><label>To</label><input id="to-date" type="date" /></div>
+      <div class="control"><label>Month</label><select id="month-select"><option value="">--optional--</option></select></div>
+      <div class="control"><label>Min (INR)</label><input id="min-amt" type="number" /></div>
+      <div class="control"><label>Max (INR)</label><input id="max-amt" type="number" /></div>
+      <div class="control" style="flex:1"><label>Search Remarks</label><input id="search-remarks" type="text" placeholder="search (case-insensitive)"/></div>
+      <div style="display:flex;gap:8px;align-items:flex-end">
+        <button id="apply-filters" class="btn">Apply</button>
+        <button id="clear-filters" class="btn secondary">Clear</button>
+      </div>
+    </div>
+
+    <div class="top-charts">
+      <div class="card">
+        <h3>Monthly Spendings — Visual</h3>
+        <div class="chart-frame"><canvas id="monthly-chart"></canvas></div>
+      </div>
+      <div class="card">
+        <h3>Daily Spend — Selected Month</h3>
+        <div style="margin-top:8px"><select id="daily-month-select" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--card-border);background:transparent;color:var(--text)"></select></div>
+        <div class="chart-frame"><canvas id="daily-chart"></canvas></div>
+      </div>
+      <div class="card">
+        <h3>Average Daily Spending</h3>
+        <div class="chart-frame"><canvas id="avg-line-chart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="pie-row">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <h3 style="margin:0">YTD Spend Distribution</h3>
+          <div><select id="ytd-pie-mode"><option value="transactions">Transactions</option><option value="spends">Spends</option></select></div>
+        </div>
+        <div class="pie-chart-frame"><canvas id="ytd-bins-pie-chart"></canvas></div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <h3 style="margin:0">Monthly Spend Distribution</h3>
+          <div style="display:flex;gap:8px"><select id="monthly-pie-month"></select><select id="monthly-pie-mode"><option value="transactions">Transactions</option><option value="spends">Spends</option></select></div>
+        </div>
+        <div class="pie-chart-frame"><canvas id="monthly-bins-pie-chart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="summary-row">
+      <div class="card">
+        <h3>Monthly Spending</h3>
+        <div style="max-height:240px;overflow:auto;margin-top:8px"><table id="monthly-table"><thead><tr><th>Month</th><th style="text-align:right">Total</th></tr></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>Average Daily Spending</h3>
+        <div style="max-height:240px;overflow:auto;margin-top:8px"><table id="avg-table"><thead><tr><th>Month</th><th style="text-align:right">Avg/day</th></tr></thead><tbody></tbody></table></div>
+        <div style="display:flex;gap:12px;margin-top:12px">
+          <div style="flex:1"><div class="muted">Credits</div><div id="total-credits" style="font-weight:700;margin-top:6px">₹0</div></div>
+          <div style="flex:1"><div class="muted">Debits</div><div id="total-debits" style="font-weight:700;margin-top:6px">₹0</div></div>
+          <div style="flex:1"><div class="muted">Net</div><div id="net-total" style="font-weight:700;margin-top:6px">₹0</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="transactions">
+      <div class="card"><h3>Credits</h3><div style="max-height:360px;overflow:auto;margin-top:8px"><table id="credits-table"><thead><tr><th>Date</th><th>Amount</th><th>Remarks</th></tr></thead><tbody></tbody></table></div></div>
+      <div class="card"><h3>Debits</h3><div style="max-height:360px;overflow:auto;margin-top:8px"><table id="debits-table"><thead><tr><th>Date</th><th>Amount</th><th>Remarks</th></tr></thead><tbody></tbody></table></div></div>
+    </div>
+
+  </div>
+
+<script>
+// Utilities (same as before)
+function parseDateDMY(str){ if(!str) return null; if(str instanceof Date && !isNaN(str)) return str; str=String(str).trim(); const m=str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/); if(m){ let d=parseInt(m[1],10), mo=parseInt(m[2],10)-1, y=parseInt(m[3],10); if(y<100) y=2000+y; const dt=new Date(y,mo,d); if(!isNaN(dt)) return dt;} const dt2=new Date(str); if(!isNaN(dt2)) return dt2; return null; }
+function formatINR(num){ if(num==null||num==='') return ''; const n=Number(num); if(isNaN(n)) return ''; return '₹'+n.toLocaleString('en-IN',{maximumFractionDigits:2}); }
+function monthKey(dt){ return dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0'); }
+function monthLabelFromKey(key){ const [y,m]=key.split('-').map(Number); return new Date(y,m-1,1).toLocaleString('en-GB',{month:'short',year:'numeric'}); }
+function daysInMonthFromKey(key){ const [y,m]=key.split('-').map(Number); return new Date(y,m,0).getDate(); }
+function totalColor(total){ if(total < 15000) return '#35760A'; else if(total >= 15000 && total < 25000) return '#EF8652'; else if(total >= 25000 && total < 30000) return '#EF3C3C'; else return '#c0392b'; }
+function avgColor(avg){ if(avg < 700) return '#35760A'; else if(avg >= 700 && avg < 1200) return '#EF8652'; else if(avg >= 1200 && avg < 1500) return '#EF3C3C'; else return '#c0392b'; }
+
+const BINS = [
+  {label:'1-500', min:1, max:500},
+  {label:'501-1000', min:501, max:1000},
+  {label:'1001-1500', min:1001, max:1500},
+  {label:'1501-2000', min:1501, max:2000},
+  {label:'2001-3000', min:2001, max:3000},
+  {label:'3001-5000', min:3001, max:5000},
+  {label:'>5000', min:5001, max:Infinity},
+];
+const BIN_COLORS = ['#6EE7B7','#F9C74F','#EF8652','#EF3C3C','#D64550','#A93226','#7a0e0e'];
+
+let transactions=[], filtered=[];
+let monthlyChart=null,dailyChart=null,avgLineChart=null,ytdBinsPie=null,monthlyBinsPie=null;
+let currentTheme='dark';
+
+/* detect columns & read workbook */
+function detectColumns(headerRow){
+  const mapping={};
+  for(let i=0;i<headerRow.length;i++){
+    const h=String(headerRow[i]||'').toLowerCase().replace(/\s+/g,'');
+    if(/date/.test(h)) mapping.date=i;
+    if(/deposit|credit|depositamount|deposit_amt/.test(h)) mapping.deposit=i;
+    if(/withdrawal|debit|withdrawalamount|withdraw_amt/.test(h)) mapping.withdrawal=i;
+    if(/remark|remarks|transactionremarks|narration|description/.test(h)) mapping.remarks=i;
+  }
+  return mapping;
+}
+
+// readWorkbookData updated to start from B13
+function readWorkbookData(wb){
+  const firstSheet = wb.Sheets[wb.SheetNames[0]];
+  const json = XLSX.utils.sheet_to_json(firstSheet, { header: 1, raw: true });
+  if(!json || json.length === 0) return [];
+
+  const startRowIndex = 12; // row 13
+  const startColIndex = 1;  // column B
+
+  if(json.length <= startRowIndex){
+    // fallback to old behavior
+    const header = json[0] || [];
+    const map = detectColumns(header);
+    const rows = [];
+    for(let r=1;r<json.length;r++){
+      const row = json[r]; if(!row) continue; if(row.every(c=>c===undefined||c==='')) continue;
+      const rawDate = map.date !== undefined ? row[map.date] : row[0];
+      let dt = null;
+      if(typeof rawDate === 'number'){ const parsed = XLSX.SSF.parse_date_code(rawDate); if(parsed) dt = new Date(parsed.y, parsed.m-1, parsed.d); } else dt = parseDateDMY(rawDate);
+      const deposit = map.deposit !== undefined ? row[map.deposit] : '';
+      const withdrawal = map.withdrawal !== undefined ? row[map.withdrawal] : '';
+      const remarks = map.remarks !== undefined ? row[map.remarks] : '';
+      rows.push({ date: dt, deposit: deposit, withdrawal: withdrawal, remarks: String(remarks || '') });
+    }
+    return rows;
+  }
+
+  const rawHeaderRow = json[startRowIndex] || [];
+  const headerRow = rawHeaderRow.slice(startColIndex);
+  const map = detectColumns(headerRow);
+
+  const rows = [];
+  for(let r = startRowIndex + 1; r < json.length; r++){
+    const fullRow = json[r] || [];
+    const rowSlice = fullRow.slice(startColIndex);
+    if(rowSlice.every(c => c === undefined || c === '')) continue;
+    const rawDate = map.date !== undefined ? rowSlice[map.date] : rowSlice[0];
+    let dt = null;
+    if(typeof rawDate === 'number'){ const parsed = XLSX.SSF.parse_date_code(rawDate); if(parsed) dt = new Date(parsed.y, parsed.m-1, parsed.d); } else dt = parseDateDMY(rawDate);
+    const deposit = map.deposit !== undefined ? rowSlice[map.deposit] : (rowSlice[1] || '');
+    const withdrawal = map.withdrawal !== undefined ? rowSlice[map.withdrawal] : (rowSlice[2] || '');
+    const remarks = map.remarks !== undefined ? rowSlice[map.remarks] : (rowSlice[3] || '');
+    rows.push({ date: dt, deposit: deposit, withdrawal: withdrawal, remarks: String(remarks || '') });
+  }
+
+  return rows;
+}
+
+function normalize(rows){ const out=[]; rows.forEach(r=>{ if(!r.date) return; const d=(r.date instanceof Date)? r.date : parseDateDMY(r.date); if(!d) return; const deposit=Number(String(r.deposit||'').replace(/[^0-9.-]+/g,''))||0; const withdrawal=Number(String(r.withdrawal||'').replace(/[^0-9.-]+/g,''))||0; out.push({date:new Date(d.getFullYear(),d.getMonth(),d.getDate()),deposit,withdrawal,remarks:r.remarks||''}); }); return out.sort((a,b)=>a.date-b.date); }
+
+/* populate month selects */
+function populateMonthSelects(){
+  const set = new Set(transactions.map(t=>monthKey(t.date)));
+  const arr = Array.from(set).sort();
+  const monthSelect=document.getElementById('month-select');
+  const daily=document.getElementById('daily-month-select');
+  const monthlyPie=document.getElementById('monthly-pie-month');
+  monthSelect.innerHTML='<option value="">--optional--</option>';
+  if(daily) daily.innerHTML='<option value="">--select--</option>';
+  if(monthlyPie) monthlyPie.innerHTML='<option value="">--select--</option>';
+  arr.forEach(k=>{
+    const o=document.createElement('option'); o.value=k; o.textContent=monthLabelFromKey(k); monthSelect.appendChild(o);
+    if(daily){ const o2=o.cloneNode(true); daily.appendChild(o2); }
+    if(monthlyPie){ const o3=o.cloneNode(true); monthlyPie.appendChild(o3); }
+  });
+  if(arr.length){ if(daily) daily.value = arr[0]; if(monthlyPie) monthlyPie.value = arr[0]; }
+}
+
+/* file input */
+document.getElementById('file-input').addEventListener('change', function(e){
+  const f = e.target.files[0];
+  document.getElementById('file-name').textContent = f? f.name : 'No file chosen';
+  if(!f) return;
+  const reader = new FileReader();
+  reader.onload = function(ev){
+    let wb;
+    try{ wb = XLSX.read(ev.target.result, {type:'binary'}); } catch(err){ alert('Failed to read file: '+err); return; }
+    const raw = readWorkbookData(wb);
+    transactions = normalize(raw);
+    populateMonthSelects();
+    filtered = transactions.slice();
+    renderAll();
+
+    // after load, initialize mutual exclusivity
+    initMutualFilters();
+  };
+  reader.readAsBinaryString(f);
+});
+
+/* filters */
+document.getElementById('apply-filters').addEventListener('click', applyFiltersAndRender);
+document.getElementById('clear-filters').addEventListener('click', ()=>{
+  document.getElementById('from-date').value=''; document.getElementById('to-date').value=''; document.getElementById('month-select').value='';
+  document.getElementById('min-amt').value=''; document.getElementById('max-amt').value=''; document.getElementById('search-remarks').value='';
+  filtered = transactions.slice(); renderAll();
+});
+
+/* mutual exclusivity between date-range and month select */
+const fromDateEl = document.getElementById('from-date');
+const toDateEl   = document.getElementById('to-date');
+const monthSelEl = document.getElementById('month-select');
+
+function setMonthDisabled(disabled){ monthSelEl.disabled = disabled; monthSelEl.style.opacity = disabled ? '0.5' : '1'; }
+function setDatesDisabled(disabled){ fromDateEl.disabled = disabled; toDateEl.disabled = disabled; fromDateEl.style.opacity = disabled ? '0.5' : '1'; toDateEl.style.opacity = disabled ? '0.5' : '1'; }
+
+monthSelEl.addEventListener('change', ()=>{
+  if(monthSelEl.value){ setDatesDisabled(true); fromDateEl.value = ''; toDateEl.value = ''; } else { setDatesDisabled(false); }
+});
+
+[fromDateEl, toDateEl].forEach(el=>{
+  el.addEventListener('input', ()=>{
+    const hasRange = (fromDateEl.value && fromDateEl.value.trim()!=='') || (toDateEl.value && toDateEl.value.trim()!=='');
+    if(hasRange){ monthSelEl.value = ''; setMonthDisabled(true); } else { setMonthDisabled(false); }
+  });
+});
+
+function initMutualFilters(){ const hasRange = (fromDateEl.value && fromDateEl.value.trim()!=='') || (toDateEl.value && toDateEl.value.trim()!==''); setMonthDisabled(hasRange); setDatesDisabled(!!monthSelEl.value); }
+
+/* remaining code: charts, renderers, etc (unchanged) */
+function applyFiltersAndRender(){
+  const fromDate = document.getElementById('from-date').value ? new Date(document.getElementById('from-date').value) : null;
+  const toDate = document.getElementById('to-date').value ? new Date(document.getElementById('to-date').value) : null;
+  if(toDate) toDate.setHours(23,59,59,999);
+  const monthSel = document.getElementById('month-select').value;
+  const minAmt = Number(document.getElementById('min-amt').value) || null;
+  const maxAmt = Number(document.getElementById('max-amt').value) || null;
+  const search = (document.getElementById('search-remarks').value || '').toLowerCase();
+
+  filtered = transactions.filter(t=>{
+    if(fromDate && t.date < fromDate) return false;
+    if(toDate && t.date > toDate) return false;
+    if(monthSel){ const [y,m]=monthSel.split('-').map(Number); if(!(t.date.getFullYear()===y && (t.date.getMonth()+1)===m)) return false; }
+    const amt = t.deposit>0? t.deposit : (t.withdrawal>0? t.withdrawal : 0);
+    if(minAmt !== null && minAmt>0 && amt < minAmt) return false;
+    if(maxAmt !== null && maxAmt>0 && amt > maxAmt) return false;
+    if(search && !String(t.remarks||'').toLowerCase().includes(search)) return false;
+    return true;
+  });
+  renderAll();
+}
+
+function destroyIfExists(o){ try{ if(o) o.destroy(); }catch(e){} }
+function renderTables(){ const ctbody=document.querySelector('#credits-table tbody'); const dtbody=document.querySelector('#debits-table tbody'); ctbody.innerHTML=''; dtbody.innerHTML=''; filtered.forEach(t=>{ if(t.deposit && t.deposit>0){ const tr=document.createElement('tr'); tr.innerHTML=`<td>${t.date.toLocaleDateString('en-GB')}</td><td><span class="amount credit">${formatINR(t.deposit)}</span></td><td>${t.remarks||''}</td>`; ctbody.appendChild(tr); } if(t.withdrawal && t.withdrawal>0){ const tr=document.createElement('tr'); tr.innerHTML=`<td>${t.date.toLocaleDateString('en-GB')}</td><td><span class="amount debit">${formatINR(t.withdrawal)}</span></td><td>${t.remarks||''}</td>`; dtbody.appendChild(tr); } }); }
+function renderMonthlyTable(){ const map=new Map(); filtered.forEach(t=>{ const k=monthKey(t.date); map.set(k,(map.get(k)||0)+(t.withdrawal||0)); }); const tbody=document.querySelector('#monthly-table tbody'); tbody.innerHTML=''; Array.from(map.keys()).sort().forEach(k=>{ const total=map.get(k); const tr=document.createElement('tr'); tr.innerHTML=`<td>${monthLabelFromKey(k)}</td><td style="text-align:right;color:${totalColor(total)}">${formatINR(total)}</td>`; tbody.appendChild(tr); }); }
+function renderAvgTable(){ const map=new Map(); filtered.forEach(t=>{ const k=monthKey(t.date); map.set(k,(map.get(k)||0)+(t.withdrawal||0)); }); const tbody=document.querySelector('#avg-table tbody'); tbody.innerHTML=''; Array.from(map.keys()).sort().forEach(k=>{ const total=map.get(k); const days=daysInMonthFromKey(k); const avg=days? total/days:0; const tr=document.createElement('tr'); tr.innerHTML=`<td>${monthLabelFromKey(k)}</td><td style="text-align:right;color:${avgColor(avg)}">${formatINR(avg)}</td>`; tbody.appendChild(tr); }); }
+function renderTotals(){ const credits=filtered.reduce((s,t)=>s+(t.deposit||0),0); const debits=filtered.reduce((s,t)=>s+(t.withdrawal||0),0); document.getElementById('total-credits').textContent=formatINR(credits); document.getElementById('total-debits').textContent=formatINR(debits); document.getElementById('net-total').textContent=formatINR(credits-debits); }
+function firstMonthKeyInFiltered(){ if(!filtered.length) return ''; const s=new Set(filtered.map(t=>monthKey(t.date))); const arr=Array.from(s).sort(); return arr[0]||''; }
+
+function renderMonthlyChart(){ const map=new Map(); filtered.forEach(t=>{ const k=monthKey(t.date); map.set(k,(map.get(k)||0)+(t.withdrawal||0)); }); const keys=Array.from(map.keys()).sort(); const labels=keys.map(k=>monthLabelFromKey(k)); const totals=keys.map(k=>map.get(k)); const colors=totals.map(total=>totalColor(total)); const ctx=document.getElementById('monthly-chart').getContext('2d'); destroyIfExists(monthlyChart); monthlyChart = new Chart(ctx,{type:'bar',data:{labels,datasets:[{data:totals,backgroundColor:colors}]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false}},scales:{x:{ticks:{maxRotation:45}},y:{ticks:{callback:v=>'₹'+Number(v).toLocaleString('en-IN')}}}}}); }
+function renderDailyChart(monthKeyValue){ const pick = monthKeyValue || document.getElementById('daily-month-select')?.value || firstMonthKeyInFiltered(); if(!pick){ destroyIfExists(dailyChart); return; } const [y,m]=pick.split('-').map(Number); const days=new Date(y,m,0).getDate(); const dayTotals=Array(days).fill(0); filtered.forEach(t=>{ if(t.date.getFullYear()===y && (t.date.getMonth()+1)===m) dayTotals[t.date.getDate()-1]+= (t.withdrawal||0); }); const labels=Array.from({length:days},(_,i)=>String(i+1)); const ctx=document.getElementById('daily-chart').getContext('2d'); destroyIfExists(dailyChart); dailyChart = new Chart(ctx,{type:'line',data:{labels,datasets:[{data:dayTotals,label:monthLabelFromKey(pick),borderColor:'#FF7A59',backgroundColor:'#FF7A5933',fill:true,tension:0.25}]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'₹'+Number(v).toLocaleString('en-IN')}}}}}); }
+function renderAvgLineChart(){ const map=new Map(); filtered.forEach(t=>{ const k=monthKey(t.date); map.set(k,(map.get(k)||0)+(t.withdrawal||0)); }); const keys=Array.from(map.keys()).sort(); const labels=keys.map(k=>monthLabelFromKey(k)); const avgs=keys.map(k=>{ const total=map.get(k); const days=daysInMonthFromKey(k); return days? total/days:0; }); const ctx=document.getElementById('avg-line-chart').getContext('2d'); destroyIfExists(avgLineChart); avgLineChart = new Chart(ctx,{type:'line',data:{labels,datasets:[{data:avgs,label:'Avg / day',borderColor:'#4AA3FF',backgroundColor:'#4AA3FF33',fill:true,tension:0.25}]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'₹'+Number(v).toLocaleString('en-IN')}}}}}); }
+function renderYtdBinsPie(){ const mode=document.getElementById('ytd-pie-mode').value||'transactions'; const counts=Array(BINS.length).fill(0); const totals=Array(BINS.length).fill(0); filtered.forEach(t=>{ const amt=t.withdrawal||0; if(amt<=0) return; for(let i=0;i<BINS.length;i++){ const b=BINS[i]; if(amt>=b.min && amt<=b.max){ counts[i]++; totals[i]+=amt; break;} if(b.max===Infinity && amt>=b.min){ counts[i]++; totals[i]+=amt; break;} }}); const dataArr = (mode==='transactions')?counts:totals.map(v=>Math.round(v)); const labels=BINS.map((b,i)=>`${b.label} (${counts[i]||0})`); const ctx=document.getElementById('ytd-bins-pie-chart').getContext('2d'); destroyIfExists(ytdBinsPie); ytdBinsPie=new Chart(ctx,{type:'pie',data:{labels,datasets:[{data:dataArr,backgroundColor:BIN_COLORS}]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{position:'bottom'}}}}); }
+function renderMonthlyBinsPie(){ const monthKeyVal=document.getElementById('monthly-pie-month').value; const mode=document.getElementById('monthly-pie-mode').value||'transactions'; const ctx=document.getElementById('monthly-bins-pie-chart').getContext('2d'); if(!monthKeyVal){ destroyIfExists(monthlyBinsPie); ctx.clearRect(0,0,ctx.canvas.width,ctx.canvas.height); return; } const [y,m]=monthKeyVal.split('-').map(Number); const counts=Array(BINS.length).fill(0); const totals=Array(BINS.length).fill(0); filtered.forEach(t=>{ if(!(t.date.getFullYear()===y && (t.date.getMonth()+1)===m)) return; const amt=t.withdrawal||0; if(amt<=0) return; for(let i=0;i<BINS.length;i++){ const b=BINS[i]; if(amt>=b.min && amt<=b.max){ counts[i]++; totals[i]+=amt; break;} if(b.max===Infinity && amt>=b.min){ counts[i]++; totals[i]+=amt; break;} }}); const dataArr=(mode==='transactions')?counts:totals.map(v=>Math.round(v)); const labels=BINS.map((b,i)=>`${b.label} (${counts[i]||0})`); destroyIfExists(monthlyBinsPie); monthlyBinsPie=new Chart(ctx,{type:'pie',data:{labels,datasets:[{data:dataArr,backgroundColor:BIN_COLORS}]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{position:'bottom'}}}}); }
+
+/* render all */
+function renderAll(){ renderTables(); renderMonthlyTable(); renderAvgTable(); renderTotals(); renderMonthlyChart(); renderYtdBinsPie(); renderMonthlyBinsPie(); renderDailyChart(document.getElementById('daily-month-select')?.value || firstMonthKeyInFiltered()); renderAvgLineChart(); }
+
+/* event listeners */
+document.getElementById('ytd-pie-mode').addEventListener('change', renderYtdBinsPie);
+document.getElementById('monthly-pie-mode').addEventListener('change', renderMonthlyBinsPie);
+document.getElementById('monthly-pie-month').addEventListener('change', renderMonthlyBinsPie);
+document.getElementById('daily-month-select')?.addEventListener('change', (e)=> renderDailyChart(e.target.value));
+
+/* Theme toggle */
+document.getElementById('theme-toggle').addEventListener('click', ()=>{ const html=document.documentElement; if(html.classList.contains('light')){ html.classList.remove('light'); currentTheme='dark'; } else { html.classList.add('light'); currentTheme='light'; } setTimeout(()=>renderAll(),80); });
+
+/* Export: improved single-print behavior (no double popup) */
+document.getElementById('export-pdf').addEventListener('click', exportFilteredPDF);
+
+function exportFilteredPDF(){
+  if(!filtered || filtered.length === 0){ alert('No data to export.'); return; }
+  const sanitize = (s) => { if(s===null||s===undefined) return ''; let out=String(s); out = out.replace(/[\u200B\u200C\u200D\uFEFF\u202A-\u202E]/g,''); out = out.replace(/\r\n|\r/g,'\n').replace(/\n+/g,' ').trim(); return out; };
+
+  const win = window.open('', '_blank', 'toolbar=0,location=0,menubar=0');
+  if(!win){ alert('Popup blocked. Allow popups for this site and try again.'); return; }
+
+  const css = `...`; // reuse same css as earlier for brevity omitted in inline doc
+  // build chart images
+  const imgMonthly = (typeof monthlyChart !== 'undefined' && monthlyChart && monthlyChart.toBase64Image) ? monthlyChart.toBase64Image() : null;
+  const imgDaily   = (typeof dailyChart !== 'undefined'   && dailyChart   && dailyChart.toBase64Image)   ? dailyChart.toBase64Image()   : null;
+  const imgAvg     = (typeof avgLineChart !== 'undefined' && avgLineChart && avgLineChart.toBase64Image) ? avgLineChart.toBase64Image() : null;
+  const imgYtdPie  = (typeof ytdBinsPie !== 'undefined'   && ytdBinsPie   && ytdBinsPie.toBase64Image)   ? ytdBinsPie.toBase64Image()   : null;
+  const imgMonthlyPie = (typeof monthlyBinsPie !== 'undefined' && monthlyBinsPie && monthlyBinsPie.toBase64Image) ? monthlyBinsPie.toBase64Image() : null;
+
+  // monthly totals
+  const monthlyMap = new Map(); filtered.forEach(t=>{ const k=monthKey(t.date); monthlyMap.set(k,(monthlyMap.get(k)||0)+(t.withdrawal||0)); }); const monthKeys = Array.from(monthlyMap.keys()).sort();
+
+  // build HTML report (inline - concise)
+  let html = `<!doctype html><html><head><meta charset="utf-8"><title>Expense Report</title><style>body{font-family:Inter,system-ui, -apple-system, 'Segoe UI', Roboto, Arial; margin:20px;color:#111} .report{max-width:900px;margin:0 auto} h1{margin:0} table{width:100%;border-collapse:collapse;font-size:12px} thead th{background:#f6f8fb;padding:8px;border:1px solid #eee} td{padding:8px;border:1px solid #f3f5f8} .col-date{width:90px} .col-amt{width:110px;text-align:right;font-weight:700} .col-remarks{width:calc(100% - 200px)} .credit{color:#1f9f3f} .debit{color:#c0392b}</style></head><body><div class="report"><h1>Expense Report</h1><div style="margin-top:6px;color:#666">Generated: ${new Date().toLocaleString('en-GB')}</div>`;
+
+  html += `<div style="margin-top:16px;display:flex;gap:12px">`;
+  html += `<div style="flex:1">${imgMonthly?`<img src="${imgMonthly}" style="width:100%">`:'<div style="padding:20px;color:#666">Monthly chart not available</div>'}</div>`;
+  html += `<div style="flex:1">${imgDaily?`<img src="${imgDaily}" style="width:100%">`:'<div style="padding:20px;color:#666">Daily chart not available</div>'}</div>`;
+  html += `<div style="flex:1">${imgAvg?`<img src="${imgAvg}" style="width:100%">`:'<div style="padding:20px;color:#666">Avg chart not available</div>'}</div>`;
+  html += `</div>`;
+
+  html += `<div style="margin-top:14px;display:flex;gap:12px">`;
+  html += `<div style="flex:1">${imgYtdPie?`<img src="${imgYtdPie}" style="width:100%">`:'<div style="padding:20px;color:#666">YTD pie not available</div>'}</div>`;
+  html += `<div style="flex:1">${imgMonthlyPie?`<img src="${imgMonthlyPie}" style="width:100%">`:'<div style="padding:20px;color:#666">Monthly pie not available</div>'}</div>`;
+  html += `</div>`;
+
+  html += `<div style="margin-top:16px"><table><thead><tr><th>Month</th><th>Total</th></tr></thead><tbody>`;
+  monthKeys.forEach(k=>{ const total = monthlyMap.get(k)||0; html += `<tr><td>${monthLabelFromKey(k)}</td><td style="text-align:right;color:${totalColor(total)}">${formatINR(total)}</td></tr>`; });
+  html += `</tbody></table></div>`;
+
+  html += `<div style="margin-top:12px"><table><thead><tr><th class="col-date">Date</th><th class="col-amt">Deposit</th><th class="col-amt">Withdrawal</th><th class="col-remarks">Remarks</th></tr></thead><tbody>`;
+  for(let i=0;i<filtered.length;i++){ const t=filtered[i]; const d=t.date?t.date.toLocaleDateString('en-GB'):''; const dep=t.deposit&&t.deposit>0?formatINR(t.deposit):''; const wit=t.withdrawal&&t.withdrawal>0?formatINR(t.withdrawal):''; const rmk=sanitize(t.remarks||''); html += `<tr><td class="col-date">${d}</td><td class="col-amt">${dep?`<span class='credit'>${dep}</span>`:''}</td><td class="col-amt">${wit?`<span class='debit'>${wit}</span>`:''}</td><td class="col-remarks">${rmk}</td></tr>`; }
+  html += `</tbody></table></div>`;
+
+  html += `<div style="margin-top:12px;color:#666;font-size:12px">Report generated by Expense Tracker</div>`;
+  html += `</div></body></html>`;
+
+  win.document.open(); win.document.write(html); win.document.close();
+
+  // single-shot print
+  let printed = false;
+  function tryPrint(){ if(printed) return; try{ printed = true; win.focus(); win.print(); }catch(e){ console.warn('print error', e); } }
+  win.addEventListener('load', ()=> setTimeout(tryPrint, 200));
+  setTimeout(tryPrint, 1200);
+}
+
+/* init empty */
+transactions = []; filtered = [];
+
+/* small render-all wrapper */
+function renderAll(){ renderTables(); renderMonthlyTable(); renderAvgTable(); renderTotals(); renderMonthlyChart(); renderYtdBinsPie(); renderMonthlyBinsPie(); renderDailyChart(document.getElementById('daily-month-select')?.value || firstMonthKeyInFiltered()); renderAvgLineChart(); }
+
+window.addEventListener('resize', ()=>{ if(monthlyChart||dailyChart||avgLineChart) renderAll(); });
+</script>
+</body>
+</html>
