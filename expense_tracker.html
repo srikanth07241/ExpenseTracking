@@ -85,9 +85,22 @@ h1{margin:0;font-size:20px}
 
 /* file row */
 .file-row{display:flex;gap:8px;align-items:center}
-.file-label{padding:10px 14px;border-radius:10px;background:var(--surface);border:1px solid var(--card-border);cursor:pointer;font-weight:700}
-#file-name{color:var(--muted);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-label{
+  display:inline-block;       /* ensure text-overflow works */
+  max-width:220px;           /* adjust this value as needed */
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
 
+/* ensure filename doesn't push layout — keep it on one line and ellipsis */
+#file-name{
+  max-width: calc(100% - 240px); /* leaves space for the button; adjust if you change button max-width */
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  display:inline-block;
+}
 /* buttons */
 .btn{background:linear-gradient(90deg,#6ee7b7,#34d399);color:#032;padding:8px 12px;border-radius:8px;border:none;cursor:pointer;font-weight:600;height:48px; min-width:140px}
 .btn.secondary{background:transparent;border:1px solid var(--card-border);color:var(--text);padding:8px 12px;border-radius:8px;height:48px; min-width:140px}
