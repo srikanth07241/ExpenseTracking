@@ -619,7 +619,7 @@ document.getElementById('export-pdf').addEventListener('click', exportFilteredPD
 async function exportFilteredPDF(){
   if(!filtered || filtered.length === 0){ alert('No data to export.'); return; }
 
-  // Ask the user whether to include the full transactions table
+  // Ask user whether to include full transactions
   function askIncludeTransactions(){
     return new Promise(resolve=>{
       const overlay = document.createElement('div');
@@ -643,7 +643,7 @@ async function exportFilteredPDF(){
 
   const includeTx = await askIncludeTransactions();
 
-  // helpers
+  // small helpers
   const sanitize = s => {
     if(s == null) return '';
     let out = String(s).replace(/[\u200B\u200C\u200D\uFEFF\u202A-\u202E]/g,'');
@@ -651,17 +651,34 @@ async function exportFilteredPDF(){
     out = out.replace(/</g,'&lt;').replace(/>/g,'&gt;');
     return out;
   };
-  function createCanvas(width=900,height=320){ const c=document.createElement('canvas'); c.width=width; c.height=height; c.style.display='none'; document.body.appendChild(c); return c; }
-  function nextFrame(){ return new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))); }
 
-  // render chart to Blob URL (safer than embedding data URIs)
+  // create canvas with devicePixelRatio scaling (fixes mobile compression / blank charts)
+  function createCanvas(width=900,height=320){
+    const ratio = window.devicePixelRatio || 1;
+    const c = document.createElement('canvas');
+    c.width = Math.round(width * ratio);
+    c.height = Math.round(height * ratio);
+    c.style.width = width + "px";
+    c.style.height = height + "px";
+    c.style.display = 'none';
+    // set CSS pixel ratio so Chart.js draws crisp lines
+    const ctx = c.getContext('2d');
+    if(ctx && ratio !== 1){
+      ctx.setTransform(ratio,0,0,ratio,0,0);
+    }
+    document.body.appendChild(c);
+    return c;
+  }
+  function nextFrame(){ return new Promise(r => requestAnimationFrame(()=>requestAnimationFrame(r))); }
+
+  // render chart function -> returns blob URL (avoids embedding huge base64 in HTML)
   async function renderChartToBlobUrl(makeChartFn, width=900, height=320){
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext('2d');
     const chart = makeChartFn(ctx, canvas);
     try{ if(typeof chart.update === 'function') chart.update(); } catch(e){}
     await nextFrame();
-    await new Promise(r=>setTimeout(r,50));
+    await new Promise(r => setTimeout(r, 60));
     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.95));
     try{ chart.destroy(); } catch(e){}
     canvas.remove();
@@ -669,7 +686,7 @@ async function exportFilteredPDF(){
     return URL.createObjectURL(blob);
   }
 
-  // Chart factories (same visual style as main page)
+  // Chart factories (use same styles as main page)
   const makeMonthlyLine = (ctx) => {
     const map = new Map();
     filtered.forEach(t=>{ const k = monthKey(t.date); map.set(k, (map.get(k)||0) + (t.withdrawal||0)); });
@@ -677,26 +694,40 @@ async function exportFilteredPDF(){
     const labels = keys.map(k => monthLabelFromKey(k));
     const totals = keys.map(k => map.get(k) || 0);
     const colors = totals.map(total => totalColor(total));
-    return new Chart(ctx, { type:'line', data:{ labels, datasets:[{ data: totals, borderColor:'#4AA3FF', borderWidth:2.4, tension:0.25, fill:false, pointRadius:6, pointBackgroundColor:colors, pointBorderColor:colors }]}, options:{ responsive:false, maintainAspectRatio:false, plugins:{legend:{display:false}} } });
+    return new Chart(ctx, {
+      type: 'line',
+      data: { labels, datasets: [{ label:'Total Spend', data: totals, borderColor:'#4AA3FF', borderWidth:2.4, tension:0.25, fill:false, pointRadius:5, pointBackgroundColor:colors, pointBorderColor:colors }] },
+      options: { responsive:false, maintainAspectRatio:false, plugins:{ legend:{ display:false } } }
+    });
   };
+
   const makeAvgLine = (ctx) => {
     const map = new Map();
     filtered.forEach(t=>{ const k = monthKey(t.date); map.set(k, (map.get(k)||0) + (t.withdrawal||0)); });
     const keys = Array.from(map.keys()).sort();
     const avgs = keys.map(k => { const total = map.get(k) || 0; const days = daysInMonthFromKey(k); return days ? total/days : 0; });
-    return new Chart(ctx, { type:'line', data:{ labels: keys.map(k=>monthLabelFromKey(k)), datasets:[{ data:avgs, borderColor:'#4AA3FF', backgroundColor:'#4AA3FF33', fill:true, tension:0.25 }]}, options:{ responsive:false, maintainAspectRatio:false, plugins:{legend:{display:false}} } });
+    return new Chart(ctx, {
+      type: 'line',
+      data: { labels: keys.map(k=>monthLabelFromKey(k)), datasets: [{ data: avgs, borderColor:'#4AA3FF', backgroundColor:'#4AA3FF33', fill:true, tension:0.25 }] },
+      options: { responsive:false, maintainAspectRatio:false, plugins:{ legend:{ display:false } } }
+    });
   };
+
   const makeDailyForKey = (ctx, monthKeyVal) => {
     const [y,m] = monthKeyVal.split('-').map(Number);
     const days = new Date(y,m,0).getDate();
     const dayTotals = Array(days).fill(0);
-    filtered.forEach(t=>{ if(t.date.getFullYear()===y && (t.date.getMonth()+1)===m) dayTotals[t.date.getDate()-1] += (t.withdrawal||0); });
-    return new Chart(ctx, { type:'line', data:{ labels: Array.from({length:days},(_,i)=>String(i+1)), datasets:[{ data: dayTotals, borderColor:'#FF7A59', backgroundColor:'#FF7A5933', fill:true, tension:0.25 }]}, options:{ responsive:false, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ y:{ ticks:{ callback:v=> '₹' + Number(v).toLocaleString('en-IN') } } } } });
+    filtered.forEach(t => { if(t.date.getFullYear()===y && (t.date.getMonth()+1)===m) dayTotals[t.date.getDate()-1] += (t.withdrawal||0); });
+    return new Chart(ctx, {
+      type: 'line',
+      data: { labels: Array.from({length:days},(_,i)=>String(i+1)), datasets: [{ data: dayTotals, borderColor:'#FF7A59', backgroundColor:'#FF7A5933', fill:true, tension:0.25 }] },
+      options: { responsive:false, maintainAspectRatio:false, plugins:{ legend:{ display:false } }, scales:{ y:{ ticks:{ callback: v => '₹' + Number(v).toLocaleString('en-IN') } } } }
+    });
   };
 
-  // bin table generator (with totals row)
+  // bin table builder (with totals)
   function buildBinTableHTMLFromCountsTotals(counts, totals){
-    let rows=''; let sumCount=0,sumTot=0;
+    let rows = ''; let sumCount = 0, sumTot = 0;
     for(let i=0;i<BINS.length;i++){
       const cnt = counts[i]||0; const tot = Math.round(totals[i]||0);
       sumCount += cnt; sumTot += tot;
@@ -712,7 +743,7 @@ async function exportFilteredPDF(){
     return '<table style="border-collapse:collapse;width:100%;font-size:13px"><thead><tr><th style="padding:6px 8px;border:1px solid #eee;text-align:left">Slab</th><th style="padding:6px 8px;border:1px solid #eee;text-align:right">Count</th><th style="padding:6px 8px;border:1px solid #eee;text-align:right">Total</th></tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
-  // prepare YTD and months
+  // prepare ytd and months
   const ytdCounts = Array(BINS.length).fill(0), ytdTotals = Array(BINS.length).fill(0);
   filtered.forEach(t => { const amt = t.withdrawal || 0; if(amt<=0) return; for(let i=0;i<BINS.length;i++){ const b=BINS[i]; if((amt>=b.min && amt<=b.max) || (b.max===Infinity && amt>=b.min)){ ytdCounts[i]++; ytdTotals[i]+=amt; break; } } });
 
@@ -721,64 +752,68 @@ async function exportFilteredPDF(){
   if(monthKeys.length === 0){ alert('No months to include in report.'); return; }
 
   try{
-    // render images to blob URLs
+    // render header images (blob URLs)
     const monthlyUrl = await renderChartToBlobUrl(makeMonthlyLine, 900, 320);
     const avgUrl = await renderChartToBlobUrl(makeAvgLine, 900, 320);
 
+    // per-month daily images + slab tables
     const perMonthUrls = [];
     for(const mk of monthKeys){
-      const durl = await renderChartToBlobUrl((ctx) => makeDailyForKey(ctx, mk), 900, 260);
+      const durl = await renderChartToBlobUrl((ctx)=> makeDailyForKey(ctx, mk), 900, 260);
       const counts = Array(BINS.length).fill(0), totals = Array(BINS.length).fill(0);
-      filtered.forEach(t => { if(monthKey(t.date)!==mk) return; const amt = t.withdrawal||0; if(amt<=0) return; for(let i=0;i<BINS.length;i++){ const b=BINS[i]; if((amt>=b.min && amt<=b.max) || (b.max===Infinity && amt>=b.min)){ counts[i]++; totals[i]+=amt; break; } } });
+      filtered.forEach(t=>{ if(monthKey(t.date)!==mk) return; const amt = t.withdrawal||0; if(amt<=0) return; for(let i=0;i<BINS.length;i++){ const b=BINS[i]; if((amt>=b.min && amt<=b.max) || (b.max===Infinity && amt>=b.min)){ counts[i]++; totals[i]+=amt; break; } } });
       const tableHTML = buildBinTableHTMLFromCountsTotals(counts, totals);
       perMonthUrls.push({ key: mk, dailyUrl: durl, tableHTML, label: monthLabelFromKey(mk) });
     }
 
-    // open preview window and write skeleton (img placeholders)
+    // open preview
     const preview = window.open('', '_blank', 'width=1200,height=900,toolbar=0,location=0,menubar=0');
-    if(!preview){ alert('Popup blocked. Allow popups for this site and try again.'); return; }
+    if(!preview){ alert('Popup blocked. Allow popups and try again.'); return; }
 
-    // build HTML skeleton without inlined base64 images (placeholders)
+    // build HTML skeleton for preview — NOTE: minimal toolbar styling to avoid color changes
     let html = '<!doctype html><html><head><meta charset="utf-8"><title>Expense Report</title>'
       + '<meta name="viewport" content="width=device-width,initial-scale=1">'
       + '<style>'
-      // responsive adjustments for mobile-friendly PDF preview
+      // keep styling conservative and responsive; do NOT override app button colors
       + 'body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:18px;color:#111;background:#fff}'
       + '.report{max-width:1100px;margin:0 auto;padding:14px}'
       + '.toolbar{display:flex;justify-content:flex-end;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}'
-      + '.toolbtn{display:inline-flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;border:1px solid #ddd;background:#f7f7f7;cursor:pointer}'
-      + '.toolbtn.primary{background:#111827;color:#fff;border:none}'
+      + '.toolbtn{display:inline-flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;border:1px solid #ddd;background:transparent;cursor:pointer}'
       + '.title{font-size:18px;font-weight:700}.meta{color:#666;font-size:13px}'
       + '.grid{display:flex;gap:12px;margin-top:12px;flex-wrap:wrap}'
       + '.col{flex:1;min-width:280px}'
-      + 'img{max-width:100%;height:auto;object-fit:contain;border:1px solid #eee;padding:6px;background:#fff}'
+      + 'img{max-width:100%;height:auto;object-fit:contain;border:1px solid #eee;padding:6px;background:#fff;display:block}'
       + 'table{width:100%;border-collapse:collapse;margin-top:12px}thead th{background:#f6f8fb;padding:8px;border:1px solid #eee}td,th{padding:8px;border:1px solid #f3f5f8;font-size:12px}'
-      + '.month-block{margin-top:18px;border:1px solid #eee;padding:10px;border-radius:8px;display:flex;gap:12px;align-items:flex-start}'
-      + '.month-block .smallcap{color:#666;font-size:12px}'
-      // make distribution column size flexible on small screens
-      + '.month-block .dist{width:340px;max-width:40%}'
-      + '@media (max-width:900px){ .report{padding:10px} .grid{flex-direction:column} .col{min-width:0;width:100%} .month-block{flex-direction:column} .month-block .dist{width:100%;max-width:100%} }'
-      + '@media (max-width:480px){ body{margin:8px} .title{font-size:16px} .toolbar{gap:6px} .toolbtn{padding:6px 8px;font-size:14px} }'
+      + '.month-block{margin-top:18px;border:1px solid #eee;padding:10px;border-radius:8px;display:flex;flex-direction:column}'
+      + '.month-block .smallcap{color:#666;font-size:12px;margin-bottom:6px}'
+      + '.dist{width:100%;max-width:420px}'
+      + '@media (min-width:900px){ .month-block{flex-direction:row;align-items:flex-start} .month-block > .left{flex:1;margin-right:12px} .month-block > .right{width:340px} }'
+      + '@media (max-width:480px){ body{margin:8px} .title{font-size:16px} .toolbtn{padding:6px 8px;font-size:14px} }'
       + '</style></head><body><div class="report">'
       + '<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px"><div><div class="title">Expense Report</div><div class="meta">Generated: ' + new Date().toLocaleString('en-GB') + '</div></div>'
-      + '<div class="toolbar"><div id="printSaveBtn" class="toolbtn primary" title="Print/Save">🖨️ Print/Save</div><div id="closeBtn" class="toolbtn" title="Close">✖ Close</div></div></div>';
+      + '<div class="toolbar"><div id="printSaveBtn" class="toolbtn" title="Print/Save">🖨️ Print/Save</div><div id="closeBtn" class="toolbtn" title="Close">✖ Close</div></div></div>';
 
+    // overview with images
     html += '<h3 style="margin-top:18px">Overview</h3><div class="grid">'
-      + '<div class="col"><div style="font-weight:600">Monthly totals</div><img id="monthlyImg" src="" alt="Monthly"></div>'
-      + '<div class="col"><div style="font-weight:600">Average/day</div><img id="avgImg" src="" alt="Avg"></div>'
+      + '<div class="col"><div style="font-weight:600">Monthly totals</div><img id="monthlyImg" src="" alt="Monthly totals"></div>'
+      + '<div class="col"><div style="font-weight:600">Average/day</div><img id="avgImg" src="" alt="Average/day"></div>'
       + '<div class="col"><div style="font-weight:600">YTD Distribution (by slab)</div>' + buildBinTableHTMLFromCountsTotals(ytdCounts, ytdTotals) + '</div></div>';
 
+    // average/day table
     html += '<h3 style="margin-top:18px">Average Daily Spending (per month)</h3><table><thead><tr><th>Month</th><th style="text-align:right">Total</th><th style="text-align:right">Avg / day</th></tr></thead><tbody>';
     const avgPerMonth = monthKeys.map(k => { const total = monthlyMap.get(k) || 0; const days = daysInMonthFromKey(k); return { key:k, total, avg: days? total/days : 0 }; });
     avgPerMonth.forEach(x => { html += '<tr><td>' + monthLabelFromKey(x.key) + '</td><td style="text-align:right;color:' + totalColor(x.total) + '">' + formatINR(x.total) + '</td><td style="text-align:right;color:' + avgColor(x.avg) + '">' + formatINR(x.avg) + '</td></tr>'; });
     html += '</tbody></table>';
 
+    // PER-MONTH: place line graph ABOVE distribution table for each month
     html += '<h3 style="margin-top:18px">Per-month Details</h3>';
     perMonthUrls.forEach((pm, idx) => {
-      html += '<div class="month-block"><div style="flex:1"><h4 style="margin:0">' + pm.label + '</h4><div class="smallcap" style="margin-top:6px">Daily Spend</div><img id="dailyImg' + idx + '" src="" alt="Daily"></div>'
-        + '<div class="dist"><div class="smallcap">Distribution (by slab)</div>' + pm.tableHTML + '</div></div>';
+      // left column will hold the line graph, right column distribution
+      html += '<div class="month-block"><div class="left"><h4 style="margin:0">' + pm.label + '</h4><div class="smallcap">Daily Spend</div><img id="dailyImg' + idx + '" src="" alt="Daily spend"></div>'
+        + '<div class="right dist"><div class="smallcap">Distribution (by slab)</div>' + pm.tableHTML + '</div></div>';
     });
 
+    // optional transactions
     if(includeTx){
       html += '<h3 style="margin-top:18px">Transactions (filtered)</h3><table><thead><tr><th>Date</th><th>Deposit</th><th>Withdrawal</th><th>Remarks</th></tr></thead><tbody>';
       for(const t of filtered){
@@ -795,7 +830,7 @@ async function exportFilteredPDF(){
 
     html += '<div style="margin-top:12px;color:#666;font-size:12px">Report generated by Expense Tracker</div></div>';
 
-    // preview script: wire Print/Save and Close in the preview window (no auto-print)
+    // preview script to wire print/save and close (no auto-print). Escape closing script.
     html += '<script>document.addEventListener("DOMContentLoaded", function(){ var p = document.getElementById("printSaveBtn"); var c = document.getElementById("closeBtn"); if(p) p.addEventListener("click", function(){ try{ window.print(); }catch(e){ console.warn("print error", e); } }); if(c) c.addEventListener("click", function(){ window.close(); }); });<\/script>';
 
     html += '</body></html>';
@@ -804,60 +839,34 @@ async function exportFilteredPDF(){
     preview.document.write(html);
     preview.document.close();
 
-    // After skeleton written, set img src attributes to blob URLs (avoid embedding large data URIs)
-    try{
-      // Use load listener of preview to set sources
-      preview.addEventListener('load', () => {
-        try{
-          const mImg = preview.document.getElementById('monthlyImg');
-          const aImg = preview.document.getElementById('avgImg');
-          if(mImg) mImg.src = monthlyUrl;
-          if(aImg) aImg.src = avgUrl;
-          perMonthUrls.forEach((pm, i) => {
-            const sel = preview.document.getElementById('dailyImg' + i);
-            if(sel) sel.src = pm.dailyUrl;
-            // revoke after a while to free memory
-            setTimeout(()=>{ try{ URL.revokeObjectURL(pm.dailyUrl); }catch(e){} }, 60000);
-          });
-          setTimeout(()=>{ try{ URL.revokeObjectURL(monthlyUrl); URL.revokeObjectURL(avgUrl); }catch(e){} }, 60000);
-        }catch(err){
-          // fallback: attempt immediate assignment
-          try{
-            const mImg2 = preview.document.getElementById('monthlyImg');
-            const aImg2 = preview.document.getElementById('avgImg');
-            if(mImg2) mImg2.src = monthlyUrl;
-            if(aImg2) aImg2.src = avgUrl;
-            perMonthUrls.forEach((pm, i) => {
-              const sel = preview.document.getElementById('dailyImg' + i);
-              if(sel) sel.src = pm.dailyUrl;
-              setTimeout(()=>{ try{ URL.revokeObjectURL(pm.dailyUrl); }catch(e){} }, 60000);
-            });
-            setTimeout(()=>{ try{ URL.revokeObjectURL(monthlyUrl); URL.revokeObjectURL(avgUrl); }catch(e){} }, 60000);
-          }catch(innerErr){
-            console.warn('Setting preview images failed', innerErr);
-          }
-        }
-      });
-    }catch(e){
-      // if addEventListener fails, try immediate assignment
+    // set images to blob URLs after preview loads (and revoke later)
+    const setImages = () => {
       try{
-        const mImg3 = preview.document.getElementById('monthlyImg');
-        const aImg3 = preview.document.getElementById('avgImg');
-        if(mImg3) mImg3.src = monthlyUrl;
-        if(aImg3) aImg3.src = avgUrl;
+        const mImg = preview.document.getElementById('monthlyImg');
+        const aImg = preview.document.getElementById('avgImg');
+        if(mImg) mImg.src = monthlyUrl;
+        if(aImg) aImg.src = avgUrl;
         perMonthUrls.forEach((pm, i) => {
           const sel = preview.document.getElementById('dailyImg' + i);
           if(sel) sel.src = pm.dailyUrl;
           setTimeout(()=>{ try{ URL.revokeObjectURL(pm.dailyUrl); }catch(e){} }, 60000);
         });
         setTimeout(()=>{ try{ URL.revokeObjectURL(monthlyUrl); URL.revokeObjectURL(avgUrl); }catch(e){} }, 60000);
-      }catch(finalErr){
-        console.warn('Setting preview images fallback failed', finalErr);
+      }catch(err){
+        // fallback: ignore — images may still be set later by browser
+        console.warn('preview image assignment failed', err);
       }
+    };
+
+    if(preview.document.readyState === 'complete'){
+      setImages();
+    } else {
+      preview.addEventListener('load', setImages);
+      setTimeout(setImages, 800);
     }
 
   } catch(err){
-    console.error('Export error (safe exporter):', err);
+    console.error('Export error (mobile-fix exporter):', err);
     alert('Failed to create report: ' + (err && err.message ? err.message : err));
   }
 }
