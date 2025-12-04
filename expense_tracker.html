@@ -628,13 +628,12 @@ async function exportFilteredPDF(){
       const box = document.createElement('div');
       box.style.background='#fff'; box.style.color='#111'; box.style.padding='18px'; box.style.borderRadius='10px';
       box.style.boxShadow='0 10px 30px rgba(0,0,0,0.2)'; box.style.maxWidth='420px'; box.style.width='90%';
-      box.innerHTML = ''
-        + '<div style="font-weight:700;margin-bottom:8px">Include all transactions?</div>'
-        + '<div style="color:#444;margin-bottom:16px">Do you want to include the full transactions table in the report?</div>'
-        + '<div style="display:flex;gap:10px;justify-content:flex-end">'
-        + '<button id="dontIncludeBtn" style="background:#e5e7eb;border:0;padding:8px 12px;border-radius:8px;cursor:pointer">Don\'t Include</button>'
-        + '<button id="includeBtn" style="background:#10b981;color:#fff;border:0;padding:8px 12px;border-radius:8px;cursor:pointer">Include</button>'
-        + '</div>';
+      box.innerHTML = "<div style=\"font-weight:700;margin-bottom:8px\">Include all transactions?</div>"
+        + "<div style=\"color:#444;margin-bottom:16px\">Do you want to include the full transactions table in the report?</div>"
+        + "<div style=\"display:flex;gap:10px;justify-content:flex-end\">"
+        + "<button id='dontIncludeBtn' style='background:#e5e7eb;border:0;padding:8px 12px;border-radius:8px;cursor:pointer'>Don't Include</button>"
+        + "<button id='includeBtn' style='background:#10b981;color:#fff;border:0;padding:8px 12px;border-radius:8px;cursor:pointer'>Include</button>"
+        + "</div>";
       overlay.appendChild(box); document.body.appendChild(overlay);
       overlay.querySelector('#includeBtn').addEventListener('click', ()=>{ document.body.removeChild(overlay); resolve(true); });
       overlay.querySelector('#dontIncludeBtn').addEventListener('click', ()=>{ document.body.removeChild(overlay); resolve(false); });
@@ -643,7 +642,7 @@ async function exportFilteredPDF(){
 
   const includeTx = await askIncludeTransactions();
 
-  // small helpers
+  // helpers
   const sanitize = s => {
     if(s == null) return '';
     let out = String(s).replace(/[\u200B\u200C\u200D\uFEFF\u202A-\u202E]/g,'');
@@ -652,7 +651,6 @@ async function exportFilteredPDF(){
     return out;
   };
 
-  // create canvas scaled for devicePixelRatio so charts render crisp on mobile and don't collapse
   function createCanvas(width=900,height=320){
     const ratio = window.devicePixelRatio || 1;
     const c = document.createElement('canvas');
@@ -670,7 +668,6 @@ async function exportFilteredPDF(){
   }
   function nextFrame(){ return new Promise(r => requestAnimationFrame(()=>requestAnimationFrame(r))); }
 
-  // render chart to blob URL
   async function renderChartToBlobUrl(makeChartFn, width=900, height=320){
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext('2d');
@@ -685,7 +682,7 @@ async function exportFilteredPDF(){
     return URL.createObjectURL(blob);
   }
 
-  // Chart factories (same visuals)
+  // Chart factories (same visuals as main page)
   const makeMonthlyLine = (ctx) => {
     const map = new Map();
     filtered.forEach(t=>{ const k = monthKey(t.date); map.set(k, (map.get(k)||0) + (t.withdrawal||0)); });
@@ -724,7 +721,6 @@ async function exportFilteredPDF(){
     });
   };
 
-  // build bin table
   function buildBinTableHTMLFromCountsTotals(counts, totals){
     let rows = ''; let sumCount = 0, sumTot = 0;
     for(let i=0;i<BINS.length;i++){
@@ -742,7 +738,7 @@ async function exportFilteredPDF(){
     return '<table style="border-collapse:collapse;width:100%;font-size:13px"><thead><tr><th style="padding:6px 8px;border:1px solid #eee;text-align:left">Slab</th><th style="padding:6px 8px;border:1px solid #eee;text-align:right">Count</th><th style="padding:6px 8px;border:1px solid #eee;text-align:right">Total</th></tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
-  // prepare totals and months
+  // prepare YTD and monthly map
   const ytdCounts = Array(BINS.length).fill(0), ytdTotals = Array(BINS.length).fill(0);
   filtered.forEach(t => { const amt = t.withdrawal || 0; if(amt<=0) return; for(let i=0;i<BINS.length;i++){ const b=BINS[i]; if((amt>=b.min && amt<=b.max) || (b.max===Infinity && amt>=b.min)){ ytdCounts[i]++; ytdTotals[i]+=amt; break; } } });
 
@@ -751,34 +747,31 @@ async function exportFilteredPDF(){
   if(monthKeys.length === 0){ alert('No months to include in report.'); return; }
 
   try{
-    // render header images
+    // render overview charts
     const monthlyUrl = await renderChartToBlobUrl(makeMonthlyLine, 900, 320);
     const avgUrl = await renderChartToBlobUrl(makeAvgLine, 900, 320);
 
-    // per-month blocks (daily images + table)
+    // per-month render
     const perMonthUrls = [];
     for(const mk of monthKeys){
-      const durl = await renderChartToBlobUrl((ctx)=> makeDailyForKey(ctx, mk), 900, 260);
+      const durl = await renderChartToBlobUrl((ctx)=> makeDailyForKey(ctx, mk), 900, 300);
       const counts = Array(BINS.length).fill(0), totals = Array(BINS.length).fill(0);
       filtered.forEach(t=>{ if(monthKey(t.date)!==mk) return; const amt = t.withdrawal||0; if(amt<=0) return; for(let i=0;i<BINS.length;i++){ const b=BINS[i]; if((amt>=b.min && amt<=b.max) || (b.max===Infinity && amt>=b.min)){ counts[i]++; totals[i]+=amt; break; } } });
       const tableHTML = buildBinTableHTMLFromCountsTotals(counts, totals);
       perMonthUrls.push({ key: mk, dailyUrl: durl, tableHTML, label: monthLabelFromKey(mk) });
     }
 
-    // open preview
     const preview = window.open('', '_blank', 'width=1200,height=900,toolbar=0,location=0,menubar=0');
     if(!preview){ alert('Popup blocked. Allow popups for this site and try again.'); return; }
 
-    // build preview HTML - group two months per printed page
+    // build preview HTML — months stacked vertically
     let html = '<!doctype html><html><head><meta charset="utf-8"><title>Expense Report</title>'
       + '<meta name="viewport" content="width=device-width,initial-scale=1">'
       + '<style>'
-      // responsive + print-friendly. Do not change main page UI colors.
       + 'body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:18px;color:#111;background:#fff}'
       + '.report{max-width:1100px;margin:0 auto;padding:14px}'
       + '.toolbar{display:flex;justify-content:flex-end;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}'
       + '.toolbtn{display:inline-flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;border:1px solid transparent;cursor:pointer}'
-      // matte blue Print/Save, red Close (preview-only)
       + '#printSaveBtn{background:#2563eb;color:#fff;border-color:#2563eb}'
       + '#closeBtn{background:transparent;color:#ef4444;border:1px solid #ef4444}'
       + '.title{font-size:18px;font-weight:700}.meta{color:#666;font-size:13px}'
@@ -786,54 +779,36 @@ async function exportFilteredPDF(){
       + '.col{flex:1;min-width:280px}'
       + 'img{max-width:100%;height:auto;object-fit:contain;border:1px solid #eee;padding:6px;background:#fff;display:block}'
       + 'table{width:100%;border-collapse:collapse;margin-top:12px}thead th{background:#f6f8fb;padding:8px;border:1px solid #eee}td,th{padding:8px;border:1px solid #f3f5f8;font-size:12px}'
-      // month-block layout: by default column (mobile), for print we'll lay two columns
       + '.month-block{margin-top:18px;border:1px solid #eee;padding:10px;border-radius:8px;display:flex;flex-direction:column}'
       + '.month-block .smallcap{color:#666;font-size:12px;margin-bottom:6px}'
       + '.dist{width:100%;max-width:420px}'
-      // wrapper that contains two month-blocks per printed page
-      + '.page{display:block;margin-bottom:18px}'
-      // print-specific rules: two months per page side by side
-      + '@media print{ .report{width:100%;padding:8px} .page{display:flex;flex-wrap:nowrap;page-break-after:always} .page .month-block{flex:1;width:50%;box-sizing:border-box;margin-right:8px} .page .month-block:last-child{margin-right:0} .toolbar{display:none} }'
-      // wider screens: show month-block as row with left (graph) and right (dist)
-      + '@media (min-width:900px){ .month-block{flex-direction:row} .month-block .left{flex:1;margin-right:12px} .month-block .right{width:340px} }'
+      + '@media (min-width:900px){ .month-block{flex-direction:row} .month-block > .left{flex:1;margin-right:12px} .month-block > .right{width:340px} }'
+      + '@media print{ .report{width:100%;padding:8px} .toolbar{display:none} img{max-height:420px} }'
       + '@media (max-width:480px){ body{margin:8px} .title{font-size:16px} .toolbtn{padding:6px 8px;font-size:14px} }'
       + '</style></head><body><div class="report">'
       + '<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px"><div><div class="title">Expense Report</div><div class="meta">Generated: ' + new Date().toLocaleString('en-GB') + '</div></div>'
       + '<div class="toolbar"><div id="printSaveBtn" class="toolbtn" title="Print/Save">🖨️ Print/Save</div><div id="closeBtn" class="toolbtn" title="Close">✖ Close</div></div></div>';
 
-    // overview with images
+    // Overview
     html += '<h3 style="margin-top:18px">Overview</h3><div class="grid">'
       + '<div class="col"><div style="font-weight:600">Monthly totals</div><img id="monthlyImg" src="" alt="Monthly totals"></div>'
       + '<div class="col"><div style="font-weight:600">Average/day</div><img id="avgImg" src="" alt="Average/day"></div>'
       + '<div class="col"><div style="font-weight:600">YTD Distribution (by slab)</div>' + buildBinTableHTMLFromCountsTotals(ytdCounts, ytdTotals) + '</div></div>';
 
-    // avg/day table
-    html += '<h3 style="margin-top:18px">Average Daily Spending (per month)</h3><table><thead><tr><th>Month</th><th style="text-align:right">Total</th><th style="text-align:right">Avg / day</th></tr></thead><tbody>';
+    // Average per month table
+    html += '<h3 style="margin-top:18px">Average Daily Spending (per month</h3><table><thead><tr><th>Month</th><th style="text-align:right">Total</th><th style="text-align:right">Avg / day</th></tr></thead><tbody>';
     const avgPerMonth = monthKeys.map(k => { const total = monthlyMap.get(k) || 0; const days = daysInMonthFromKey(k); return { key:k, total, avg: days? total/days : 0 }; });
     avgPerMonth.forEach(x => { html += '<tr><td>' + monthLabelFromKey(x.key) + '</td><td style="text-align:right;color:' + totalColor(x.total) + '">' + formatINR(x.total) + '</td><td style="text-align:right;color:' + avgColor(x.avg) + '">' + formatINR(x.avg) + '</td></tr>'; });
     html += '</tbody></table>';
 
-    // Build pages: group 2 months per .page wrapper
+    // Per-month details: stacked vertically (one after another)
     html += '<h3 style="margin-top:18px">Per-month Details</h3>';
-    for(let i=0;i<perMonthUrls.length;i+=2){
-      html += '<div class="page">';
-      // first month
-      const pm1 = perMonthUrls[i];
-      html += '<div class="month-block left-right"><div class="left"><h4 style="margin:0">' + pm1.label + '</h4><div class="smallcap">Daily Spend</div><img id="dailyImg' + i + '" src="" alt="Daily spend"></div>'
-           + '<div class="right dist"><div class="smallcap">Distribution (by slab)</div>' + pm1.tableHTML + '</div></div>';
-      // second month, if exists
-      if(i+1 < perMonthUrls.length){
-        const pm2 = perMonthUrls[i+1];
-        html += '<div class="month-block left-right"><div class="left"><h4 style="margin:0">' + pm2.label + '</h4><div class="smallcap">Daily Spend</div><img id="dailyImg' + (i+1) + '" src="" alt="Daily spend"></div>'
-             + '<div class="right dist"><div class="smallcap">Distribution (by slab)</div>' + pm2.tableHTML + '</div></div>';
-      } else {
-        // placeholder empty column to keep spacing consistent on page
-        html += '<div class="month-block left-right" style="visibility:hidden"><div class="left"><h4 style="margin:0"> </h4><div class="smallcap"></div><img src=""></div><div class="right dist"></div></div>';
-      }
-      html += '</div>'; // close page
-    }
+    perMonthUrls.forEach((pm, idx) => {
+      html += '<div class="month-block"><div class="left"><h4 style="margin:0">' + pm.label + '</h4><div class="smallcap">Daily Spend</div><img id="dailyImg' + idx + '" src="" alt="Daily spend"></div>'
+        + '<div class="right dist"><div class="smallcap">Distribution (by slab)</div>' + pm.tableHTML + '</div></div>';
+    });
 
-    // transactions
+    // Transactions (optional)
     if(includeTx){
       html += '<h3 style="margin-top:18px">Transactions (filtered)</h3><table><thead><tr><th>Date</th><th>Deposit</th><th>Withdrawal</th><th>Remarks</th></tr></thead><tbody>';
       for(const t of filtered){
@@ -850,7 +825,7 @@ async function exportFilteredPDF(){
 
     html += '<div style="margin-top:12px;color:#666;font-size:12px">Report generated by Expense Tracker</div></div>';
 
-    // wire print/close: note escaped closing script tag
+    // Wire print/close in preview (escape closing tag)
     html += '<script>document.addEventListener("DOMContentLoaded", function(){ var p = document.getElementById("printSaveBtn"); var c = document.getElementById("closeBtn"); if(p) p.addEventListener("click", function(){ try{ window.print(); }catch(e){ console.warn("print error", e); } }); if(c) c.addEventListener("click", function(){ window.close(); }); });<\/script>';
 
     html += '</body></html>';
@@ -859,7 +834,7 @@ async function exportFilteredPDF(){
     preview.document.write(html);
     preview.document.close();
 
-    // After skeleton written, set img src attributes to blob URLs (avoid heavy inline base64)
+    // assign blob urls to preview images
     const setImages = () => {
       try{
         const mImg = preview.document.getElementById('monthlyImg');
@@ -869,6 +844,7 @@ async function exportFilteredPDF(){
         perMonthUrls.forEach((pm, i) => {
           const sel = preview.document.getElementById('dailyImg' + i);
           if(sel) sel.src = pm.dailyUrl;
+          // revoke after a minute
           setTimeout(()=>{ try{ URL.revokeObjectURL(pm.dailyUrl); }catch(e){} }, 60000);
         });
         setTimeout(()=>{ try{ URL.revokeObjectURL(monthlyUrl); URL.revokeObjectURL(avgUrl); }catch(e){} }, 60000);
@@ -885,7 +861,7 @@ async function exportFilteredPDF(){
     }
 
   } catch(err){
-    console.error('Export error (two-per-page):', err);
+    console.error('Export error (vertical months):', err);
     alert('Failed to create report: ' + (err && err.message ? err.message : err));
   }
 }
