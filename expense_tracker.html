@@ -854,7 +854,7 @@ async function exportFilteredPDF(){
     const maxVal = totalsReal.length ? Math.max(...totalsReal) : 0;
   
     // if maxVal === 0, avoid divide-by-zero
-    const totalsPct = totalsReal.map(v => maxVal ? (v / maxVal) * 200 : 0);
+    const totalsPct = totalsReal.map(v => maxVal ? (v / maxVal) * 250 : 0);
     // color based on real value (keeps original thresholds)
     const bg = totalsReal.map(v => colorForValue(v));
     console.log('PDF Chart → Monthly (percent) max=', maxVal);
@@ -896,7 +896,7 @@ async function exportFilteredPDF(){
       return days ? (total / days) : 0;
     });
     const maxVal = avgsReal.length ? Math.max(...avgsReal) : 0;
-    const avgsPct = avgsReal.map(v => maxVal ? (v / maxVal) * 250 : 0);
+    const avgsPct = avgsReal.map(v => maxVal ? (v / maxVal) * 300 : 0);
     const bg = avgsReal.map(v => colorForValue(v));
     console.log('PDF Chart → Avg/day (percent) max=', maxVal);
   
@@ -933,7 +933,7 @@ async function exportFilteredPDF(){
       }
     });
     const maxVal = dayTotalsReal.length ? Math.max(...dayTotalsReal) : 0;
-    const dayTotalsPct = dayTotalsReal.map(v => maxVal ? (v / maxVal) * 250 : 0);
+    const dayTotalsPct = dayTotalsReal.map(v => maxVal ? (v / maxVal) * 300 : 0);
     const bg = dayTotalsReal.map(v => colorForValue(v));
     console.log('PDF Chart →', monthLabelFromKey(monthKeyVal), 'daily (percent) max=', maxVal);
   
