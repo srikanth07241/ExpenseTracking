@@ -619,7 +619,7 @@ document.getElementById('export-pdf').addEventListener('click', exportFilteredPD
 async function exportFilteredPDF(){
   if(!filtered || filtered.length === 0){ alert('No data to export.'); return; }
 
-  // Ask user whether to include full transactions
+  // --- modal: include transactions? ---
   function askIncludeTransactions(){
     return new Promise(resolve=>{
       const overlay = document.createElement('div');
@@ -629,28 +629,113 @@ async function exportFilteredPDF(){
       box.style.background='#fff'; box.style.color='#111'; box.style.padding='18px'; box.style.borderRadius='10px';
       box.style.boxShadow='0 10px 30px rgba(0,0,0,0.2)'; box.style.maxWidth='420px'; box.style.width='90%';
       box.innerHTML = "<div style=\"font-weight:700;margin-bottom:8px\">Include all transactions?</div>"
-        + "<div style=\"color:#444;margin-bottom:16px\">Do you want to include the full transactions table in the report?</div>"
+        + "<div style=\"color:#444;margin-bottom:16px\">Do you want to include the full/filtered transactions list as table in the report?</div>"
         + "<div style=\"display:flex;gap:10px;justify-content:flex-end\">"
         + "<button id='dontIncludeBtn' style='background:#e5e7eb;border:0;padding:8px 12px;border-radius:8px;cursor:pointer'>Don't Include</button>"
         + "<button id='includeBtn' style='background:#10b981;color:#fff;border:0;padding:8px 12px;border-radius:8px;cursor:pointer'>Include</button>"
+        + "<button id='closeButton' style='background:#991a2f;color:#fff;border:0;padding:8px 12px;border-radius:8px;cursor:pointer'>Close</button>"
         + "</div>";
       overlay.appendChild(box); document.body.appendChild(overlay);
       overlay.querySelector('#includeBtn').addEventListener('click', ()=>{ document.body.removeChild(overlay); resolve(true); });
       overlay.querySelector('#dontIncludeBtn').addEventListener('click', ()=>{ document.body.removeChild(overlay); resolve(false); });
+      overlay.querySelector('#closeButton').addEventListener('click', ()=>{ document.body.removeChild(overlay) });
+
     });
   }
 
   const includeTx = await askIncludeTransactions();
 
-  // helpers
-  const sanitize = s => {
+  // --- helpers ---
+  function toNumberAmt(v){
+    if(v == null) return 0;
+    if(typeof v === 'number' && isFinite(v)) return v;
+    const cleaned = String(v).replace(/[^0-9.\-]+/g, '');
+    const n = parseFloat(cleaned);
+    return isFinite(n) ? n : 0;
+  }
+
+  function sanitize(s){
     if(s == null) return '';
     let out = String(s).replace(/[\u200B\u200C\u200D\uFEFF\u202A-\u202E]/g,'');
     out = out.replace(/\r\n|\r/g,' ').replace(/\n+/g,' ').trim();
     out = out.replace(/</g,'&lt;').replace(/>/g,'&gt;');
     return out;
-  };
+  }
 
+  // compute friendly Y-axis cap
+  function computeYCap(maxValue){
+    if(!isFinite(maxValue) || maxValue <= 0) return undefined;
+    const headroom = 0.10;
+    let step;
+    if(maxValue <= 100) step = 10;
+    else if(maxValue <= 1000) step = 100;
+    else if(maxValue <= 5000) step = 500;
+    else step = 1000;
+    const base = Math.ceil(maxValue / step) * step;
+    const cap = Math.ceil((base * (1 + headroom)) / step) * step;
+    return cap;
+  }
+
+  function buildBinTableHTMLFromCountsTotals(counts, totals){
+    let rows = '';
+    let sumCount = 0, sumTot = 0;
+  
+    for (let i = 0; i < BINS.length; i++) {
+      const cnt = counts[i] || 0;
+      const tot = Math.round(totals[i] || 0);
+      sumCount += cnt;
+      sumTot += tot;
+  
+      const color = (typeof colorForValue === 'function') ? colorForValue(tot) : '#111';
+  
+      rows +=
+        '<tr>' +
+          '<td style="padding:6px 8px;border:1px solid #eee">' + sanitize(BINS[i].label) + '</td>' +
+          '<td style="padding:6px 8px;border:1px solid #eee;text-align:right">' + cnt + '</td>' +
+          '<td style="padding:6px 8px;border:1px solid #eee;text-align:right;color:' + color + ';font-weight:700">' +
+              formatINR(tot) +
+          '</td>' +
+        '</tr>';
+    }
+  
+    const totalColor = (typeof colorForValue === 'function') ? colorForValue(sumTot) : '#111';
+  
+    rows +=
+      '<tr>' +
+        '<td style="padding:6px 8px;border:1px solid #eee;font-weight:700">Total</td>' +
+        '<td style="padding:6px 8px;border:1px solid #eee;text-align:right;font-weight:700">' + sumCount + '</td>' +
+        '<td style="padding:6px 8px;border:1px solid #eee;text-align:right;color:' + totalColor + ';font-weight:800">' +
+            formatINR(sumTot) +
+        '</td>' +
+      '</tr>';
+  
+    return (
+      '<table style="border-collapse:collapse;width:100%;font-size:13px">' +
+        '<thead>' +
+          '<tr>' +
+            '<th style="padding:6px 8px;border:1px solid #eee;text-align:left">Slab</th>' +
+            '<th style="padding:6px 8px;border:1px solid #eee;text-align:right">Count</th>' +
+            '<th style="padding:6px 8px;border:1px solid #eee;text-align:right">Total</th>' +
+          '</tr>' +
+        '</thead>' +
+        '<tbody>' + rows + '</tbody>' +
+      '</table>'
+    );
+  }
+
+  // color mapping for value ranges (green, orange, light-red, red)
+  // thresholds chosen relative to max or absolute — we'll use absolute buckets to keep consistent.
+  function colorForValue(v){
+    // v is numeric >=0
+    // You can tune thresholds here. Currently:
+    // 0 - 1000 => green; 1001 - 5000 => orange; 5001 - 15000 => light red; >15000 => red
+    if(v <= 1000) return '#16a34a';        // green
+    if(v <= 5000) return '#f59e0b';        // orange
+    if(v <= 15000) return '#fb7185';       // light red (pinkish)
+    return '#ef4444';                      // red
+  }
+
+  // canvas + DPR handling (use ctx.scale and set Chart.defaults.devicePixelRatio while creating)
   function createCanvas(width=900,height=320){
     const ratio = window.devicePixelRatio || 1;
     const c = document.createElement('canvas');
@@ -661,110 +746,244 @@ async function exportFilteredPDF(){
     c.style.display = 'none';
     const ctx = c.getContext('2d');
     if(ctx && ratio !== 1){
-      ctx.setTransform(ratio,0,0,ratio,0,0);
+      ctx.scale(ratio, ratio);
     }
     document.body.appendChild(c);
     return c;
   }
   function nextFrame(){ return new Promise(r => requestAnimationFrame(()=>requestAnimationFrame(r))); }
 
+  // draw value plugin
+  const drawValuePlugin = {
+    id: 'drawValuePlugin',
+    afterDatasetsDraw(chart, args, options) {
+      const ctx = chart.ctx;
+  
+      chart.data.datasets.forEach((dataset, dsIndex) => {
+        const meta = chart.getDatasetMeta(dsIndex);
+  
+        meta.data.forEach((bar, index) => {
+          const realVal =
+            dataset.realValues && dataset.realValues[index] != null
+              ? dataset.realValues[index]
+              : dataset.data[index];
+  
+          const label =
+            typeof formatINR === "function" ? formatINR(realVal) : String(realVal);
+  
+          const pos = bar.tooltipPosition();
+  
+          ctx.save();
+          ctx.font = "700 25px Inter system-ui, Arial";       // ⬆️ Larger font
+          ctx.fillStyle = "#111";
+          ctx.textAlign = "center";
+  
+          // --- auto-rotate logic ---
+          const textWidth = ctx.measureText(label).width;
+          const barWidth = bar.width || (bar.x && bar.base ? Math.abs(bar.x - bar.base) : 0);
+          const angle = -90 * (Math.PI / 180);
+          const offset = 50; 
+          if (textWidth > barWidth * 0.9) {
+            // rotate 90 degrees
+            ctx.translate(pos.x, pos.y - offset);
+            ctx.rotate(angle);
+            ctx.fillText(label, 0, 0);
+          } else {
+            // normal horizontal
+            ctx.fillText(label, pos.x, pos.y - offset);
+          }
+  
+          ctx.restore();
+        });
+      });
+    }
+  };
+
+
+  // renderChartToBlobUrl with Chart.defaults.devicePixelRatio set
   async function renderChartToBlobUrl(makeChartFn, width=900, height=320){
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext('2d');
-    const chart = makeChartFn(ctx, canvas);
-    try{ if(typeof chart.update === 'function') chart.update(); } catch(e){}
-    await nextFrame();
-    await new Promise(r => setTimeout(r, 60));
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.95));
-    try{ chart.destroy(); } catch(e){}
-    canvas.remove();
-    if(!blob) throw new Error('Failed to render chart blob');
-    return URL.createObjectURL(blob);
-  }
-
-  // Chart factories (same visuals as main page)
-  const makeMonthlyLine = (ctx) => {
-    const map = new Map();
-    filtered.forEach(t=>{ const k = monthKey(t.date); map.set(k, (map.get(k)||0) + (t.withdrawal||0)); });
-    const keys = Array.from(map.keys()).sort();
-    const labels = keys.map(k => monthLabelFromKey(k));
-    const totals = keys.map(k => map.get(k) || 0);
-    const colors = totals.map(total => totalColor(total));
-    return new Chart(ctx, {
-      type: 'line',
-      data: { labels, datasets: [{ label:'Total Spend', data: totals, borderColor:'#4AA3FF', borderWidth:2.4, tension:0.25, fill:false, pointRadius:5, pointBackgroundColor:colors, pointBorderColor:colors }] },
-      options: { responsive:false, maintainAspectRatio:false, plugins:{ legend:{ display:false } } }
-    });
-  };
-
-  const makeAvgLine = (ctx) => {
-    const map = new Map();
-    filtered.forEach(t=>{ const k = monthKey(t.date); map.set(k, (map.get(k)||0) + (t.withdrawal||0)); });
-    const keys = Array.from(map.keys()).sort();
-    const avgs = keys.map(k => { const total = map.get(k) || 0; const days = daysInMonthFromKey(k); return days ? total/days : 0; });
-    return new Chart(ctx, {
-      type: 'line',
-      data: { labels: keys.map(k=>monthLabelFromKey(k)), datasets: [{ data: avgs, borderColor:'#4AA3FF', backgroundColor:'#4AA3FF33', fill:true, tension:0.25 }] },
-      options: { responsive:false, maintainAspectRatio:false, plugins:{ legend:{ display:false } } }
-    });
-  };
-
-  const makeDailyForKey = (ctx, monthKeyVal) => {
-    const [y,m] = monthKeyVal.split('-').map(Number);
-    const days = new Date(y,m,0).getDate();
-    const dayTotals = Array(days).fill(0);
-    filtered.forEach(t => { if(t.date.getFullYear()===y && (t.date.getMonth()+1)===m) dayTotals[t.date.getDate()-1] += (t.withdrawal||0); });
-    return new Chart(ctx, {
-      type: 'line',
-      data: { labels: Array.from({length:days},(_,i)=>String(i+1)), datasets: [{ data: dayTotals, borderColor:'#FF7A59', backgroundColor:'#FF7A5933', fill:true, tension:0.25 }] },
-      options: { responsive:false, maintainAspectRatio:false, plugins:{ legend:{ display:false } }, scales:{ y:{ ticks:{ callback: v => '₹' + Number(v).toLocaleString('en-IN') } } } }
-    });
-  };
-
-  function buildBinTableHTMLFromCountsTotals(counts, totals){
-    let rows = ''; let sumCount = 0, sumTot = 0;
-    for(let i=0;i<BINS.length;i++){
-      const cnt = counts[i]||0; const tot = Math.round(totals[i]||0);
-      sumCount += cnt; sumTot += tot;
-      const color = avgColor(tot);
-      rows += '<tr><td style="padding:6px 8px;border:1px solid #eee">' + sanitize(BINS[i].label) + '</td>'
-        + '<td style="padding:6px 8px;border:1px solid #eee;text-align:right">' + cnt + '</td>'
-        + '<td style="padding:6px 8px;border:1px solid #eee;text-align:right;color:' + color + ';font-weight:700">' + formatINR(tot) + '</td></tr>';
+    const originalDPR = (typeof Chart !== 'undefined' && Chart.defaults && Chart.defaults.devicePixelRatio) ? Chart.defaults.devicePixelRatio : undefined;
+    try{
+      if(typeof Chart !== 'undefined' && Chart.defaults) Chart.defaults.devicePixelRatio = window.devicePixelRatio || 1;
+      const chart = makeChartFn(ctx, canvas);
+      try{ if(typeof chart.update === 'function') chart.update(); } catch(e){}
+      await nextFrame();
+      await new Promise(r => setTimeout(r, 60));
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.95));
+      try{ chart.destroy(); } catch(e){}
+      canvas.remove();
+      if(!blob) throw new Error('Failed to render chart blob');
+      return URL.createObjectURL(blob);
+    } finally {
+      if(typeof Chart !== 'undefined' && Chart.defaults){
+        if(originalDPR === undefined) delete Chart.defaults.devicePixelRatio;
+        else Chart.defaults.devicePixelRatio = originalDPR;
+      }
     }
-    const totColor = avgColor(sumTot);
-    rows += '<tr><td style="padding:6px 8px;border:1px solid #eee;font-weight:700">Total</td>'
-      + '<td style="padding:6px 8px;border:1px solid #eee;text-align:right;font-weight:700">' + sumCount + '</td>'
-      + '<td style="padding:6px 8px;border:1px solid #eee;text-align:right;color:' + totColor + ';font-weight:800">' + formatINR(sumTot) + '</td></tr>';
-    return '<table style="border-collapse:collapse;width:100%;font-size:13px"><thead><tr><th style="padding:6px 8px;border:1px solid #eee;text-align:left">Slab</th><th style="padding:6px 8px;border:1px solid #eee;text-align:right">Count</th><th style="padding:6px 8px;border:1px solid #eee;text-align:right">Total</th></tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
-  // prepare YTD and monthly map
+  // --- prepare data ---
   const ytdCounts = Array(BINS.length).fill(0), ytdTotals = Array(BINS.length).fill(0);
-  filtered.forEach(t => { const amt = t.withdrawal || 0; if(amt<=0) return; for(let i=0;i<BINS.length;i++){ const b=BINS[i]; if((amt>=b.min && amt<=b.max) || (b.max===Infinity && amt>=b.min)){ ytdCounts[i]++; ytdTotals[i]+=amt; break; } } });
-
-  const monthlyMap = new Map(); filtered.forEach(t=>{ const k = monthKey(t.date); monthlyMap.set(k, (monthlyMap.get(k)||0) + (t.withdrawal||0)); });
+  const monthlyMap = new Map();
+  filtered.forEach(t => {
+    const amt = toNumberAmt(t.withdrawal || 0);
+    if(amt > 0){
+      for(let i=0;i<BINS.length;i++){
+        const b = BINS[i];
+        if((amt >= b.min && amt <= b.max) || (b.max === Infinity && amt >= b.min)){
+          ytdCounts[i] += 1;
+          ytdTotals[i] += amt;
+          break;
+        }
+      }
+    }
+    const k = monthKey(t.date);
+    const prev = monthlyMap.get(k) || 0;
+    monthlyMap.set(k, prev + amt);
+  });
   const monthKeys = Array.from(monthlyMap.keys()).sort();
   if(monthKeys.length === 0){ alert('No months to include in report.'); return; }
 
-  try{
-    // render overview charts
-    const monthlyUrl = await renderChartToBlobUrl(makeMonthlyLine, 900, 320);
-    const avgUrl = await renderChartToBlobUrl(makeAvgLine, 900, 320);
+  // REPLACE makeMonthlyBar
+  const makeMonthlyBar = (ctx) => {
+    const keys = Array.from(monthlyMap.keys()).sort();
+    const labels = keys.map(k => monthLabelFromKey(k));
+    const totalsReal = keys.map(k => toNumberAmt(monthlyMap.get(k) || 0));
+    const maxVal = totalsReal.length ? Math.max(...totalsReal) : 0;
+  
+    // if maxVal === 0, avoid divide-by-zero
+    const totalsPct = totalsReal.map(v => maxVal ? (v / maxVal) * 200 : 0);
+    // color based on real value (keeps original thresholds)
+    const bg = totalsReal.map(v => colorForValue(v));
+    console.log('PDF Chart → Monthly (percent) max=', maxVal);
+  
+    return new Chart(ctx, {
+      type: 'bar',
+      data: { labels, datasets: [{ label: 'Monthly Total', data: totalsPct, backgroundColor: bg, borderColor: bg, borderWidth: 1, realValues: totalsReal }] },
+      options: {
+        responsive:false, maintainAspectRatio:false,
+        plugins:{ legend:{ display:false }, tooltip: {
+          callbacks: {
+            label: function(ctx){
+              const ds = ctx.dataset;
+              const idx = ctx.dataIndex;
+              const real = (ds && ds.realValues) ? ds.realValues[idx] : ctx.raw;
+              return (typeof formatINR === 'function') ? formatINR(real) : String(real);
+            }
+          }
+        }},
+        scales: {
+          x: { ticks: { maxRotation: 0, autoSkip: false } },
+          y: {
+            display: false, // hide y-axis entirely
+            min: 0,
+            max: 100
+          }
+        }
+      },
+      plugins: [drawValuePlugin]
+    });
+  };
+  
+  // REPLACE makeAvgBar
+  const makeAvgBar = (ctx) => {
+    const keys = Array.from(monthlyMap.keys()).sort();
+    const avgsReal = keys.map(k => {
+      const total = toNumberAmt(monthlyMap.get(k) || 0);
+      const days = daysInMonthFromKey(k) || 1;
+      return days ? (total / days) : 0;
+    });
+    const maxVal = avgsReal.length ? Math.max(...avgsReal) : 0;
+    const avgsPct = avgsReal.map(v => maxVal ? (v / maxVal) * 250 : 0);
+    const bg = avgsReal.map(v => colorForValue(v));
+    console.log('PDF Chart → Avg/day (percent) max=', maxVal);
+  
+    return new Chart(ctx, {
+      type: 'bar',
+      data: { labels: keys.map(k => monthLabelFromKey(k)), datasets: [{ label: 'Avg/day', data: avgsPct, backgroundColor: bg, borderColor: bg, borderWidth: 1, realValues: avgsReal }] },
+      options: {
+        responsive:false, maintainAspectRatio:false,
+        plugins:{ legend:{ display:false }, tooltip: {
+          callbacks: {
+            label: function(ctx){
+              const ds = ctx.dataset;
+              const idx = ctx.dataIndex;
+              const real = (ds && ds.realValues) ? ds.realValues[idx] : ctx.raw;
+              return (typeof formatINR === 'function') ? formatINR(real) : String(real);
+            }
+          }
+        }},
+        scales: { x: { ticks: { maxRotation: 0, autoSkip: false } }, y: { display:false, min:0, max:100 } }
+      },
+      plugins: [drawValuePlugin]
+    });
+  };
+  
+  // REPLACE makeDailyBarForKey
+  const makeDailyBarForKey = (ctx, monthKeyVal) => {
+    const [y,m] = monthKeyVal.split('-').map(Number);
+    const days = new Date(y, m, 0).getDate();
+    const dayTotalsReal = Array(days).fill(0);
+    filtered.forEach(t => {
+      if(!t.date) return;
+      if(t.date.getFullYear() === y && (t.date.getMonth()+1) === m){
+        dayTotalsReal[t.date.getDate()-1] += toNumberAmt(t.withdrawal || 0);
+      }
+    });
+    const maxVal = dayTotalsReal.length ? Math.max(...dayTotalsReal) : 0;
+    const dayTotalsPct = dayTotalsReal.map(v => maxVal ? (v / maxVal) * 250 : 0);
+    const bg = dayTotalsReal.map(v => colorForValue(v));
+    console.log('PDF Chart →', monthLabelFromKey(monthKeyVal), 'daily (percent) max=', maxVal);
+  
+    return new Chart(ctx, {
+      type: 'bar',
+      data: { labels: Array.from({length:days},(_,i)=>String(i+1)), datasets: [{ data: dayTotalsPct, backgroundColor: bg, borderColor: bg, borderWidth: 1, realValues: dayTotalsReal }] },
+      options: {
+        responsive:false, maintainAspectRatio:false,
+        plugins:{ legend:{ display:false }, tooltip: {
+          callbacks: {
+            label: function(ctx){
+              const ds = ctx.dataset;
+              const idx = ctx.dataIndex;
+              const real = (ds && ds.realValues) ? ds.realValues[idx] : ctx.raw;
+              return (typeof formatINR === 'function') ? formatINR(real) : String(real);
+            }
+          }
+        }},
+        scales: { x: { ticks: { maxRotation: 0, autoSkip: false } }, y: { display:false, min:0, max:100 } }
+      },
+      plugins: [drawValuePlugin]
+    });
+  };
 
-    // per-month render
+  // --- render charts to blob URLs ---
+  try{
+    const monthlyUrl = await renderChartToBlobUrl(makeMonthlyBar, 900, 575);
+    const avgUrl     = await renderChartToBlobUrl(makeAvgBar, 900, 575);
+
     const perMonthUrls = [];
     for(const mk of monthKeys){
-      const durl = await renderChartToBlobUrl((ctx)=> makeDailyForKey(ctx, mk), 900, 300);
+      const durl = await renderChartToBlobUrl((ctx)=> makeDailyBarForKey(ctx, mk), 900, 320);
       const counts = Array(BINS.length).fill(0), totals = Array(BINS.length).fill(0);
-      filtered.forEach(t=>{ if(monthKey(t.date)!==mk) return; const amt = t.withdrawal||0; if(amt<=0) return; for(let i=0;i<BINS.length;i++){ const b=BINS[i]; if((amt>=b.min && amt<=b.max) || (b.max===Infinity && amt>=b.min)){ counts[i]++; totals[i]+=amt; break; } } });
+      filtered.forEach(t => {
+        if(monthKey(t.date)!==mk) return;
+        const amt = toNumberAmt(t.withdrawal || 0);
+        if(amt<=0) return;
+        for(let i=0;i<BINS.length;i++){
+          const b = BINS[i];
+          if((amt >= b.min && amt <= b.max) || (b.max===Infinity && amt >= b.min)){ counts[i]++; totals[i]+=amt; break; }
+        }
+      });
       const tableHTML = buildBinTableHTMLFromCountsTotals(counts, totals);
       perMonthUrls.push({ key: mk, dailyUrl: durl, tableHTML, label: monthLabelFromKey(mk) });
     }
 
+    // build preview HTML (vertical stacking)
     const preview = window.open('', '_blank', 'width=1200,height=900,toolbar=0,location=0,menubar=0');
     if(!preview){ alert('Popup blocked. Allow popups for this site and try again.'); return; }
 
-    // build preview HTML — months stacked vertically
     let html = '<!doctype html><html><head><meta charset="utf-8"><title>Expense Report</title>'
       + '<meta name="viewport" content="width=device-width,initial-scale=1">'
       + '<style>'
@@ -778,45 +997,46 @@ async function exportFilteredPDF(){
       + '.grid{display:flex;gap:12px;margin-top:12px;flex-wrap:wrap}'
       + '.col{flex:1;min-width:280px}'
       + 'img{max-width:100%;height:auto;object-fit:contain;border:1px solid #eee;padding:6px;background:#fff;display:block}'
-      + 'table{width:100%;border-collapse:collapse;margin-top:12px}thead th{background:#f6f8fb;padding:8px;border:1px solid #eee}td,th{padding:8px;border:1px solid #f3f5f8;font-size:12px}'
+      + 'table{width:100%;border-collapse:collapse;margin-top:0}thead th{background:#f6f8fb;padding:8px;border:1px solid #eee}td,th{padding:8px;border:1px solid #f3f5f8;font-size:12px}'
       + '.month-block{margin-top:18px;border:1px solid #eee;padding:10px;border-radius:8px;display:flex;flex-direction:column}'
       + '.month-block .smallcap{color:#666;font-size:12px;margin-bottom:6px}'
       + '.dist{width:100%;max-width:420px}'
-      + '@media (min-width:900px){ .month-block{flex-direction:row} .month-block > .left{flex:1;margin-right:12px} .month-block > .right{width:340px} }'
+      + '@media (min-width:900px){ .month-block{flex-direction:row;align-items:flex-start} .month-block > .left{flex:1;margin-right:12px} .month-block > .right{width:340px;padding-top:22px} }'
       + '@media print{ .report{width:100%;padding:8px} .toolbar{display:none} img{max-height:420px} }'
       + '@media (max-width:480px){ body{margin:8px} .title{font-size:16px} .toolbtn{padding:6px 8px;font-size:14px} }'
       + '</style></head><body><div class="report">'
       + '<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px"><div><div class="title">Expense Report</div><div class="meta">Generated: ' + new Date().toLocaleString('en-GB') + '</div></div>'
       + '<div class="toolbar"><div id="printSaveBtn" class="toolbtn" title="Print/Save">🖨️ Print/Save</div><div id="closeBtn" class="toolbtn" title="Close">✖ Close</div></div></div>';
 
-    // Overview
+
+    // overview
     html += '<h3 style="margin-top:18px">Overview</h3><div class="grid">'
       + '<div class="col"><div style="font-weight:600">Monthly totals</div><img id="monthlyImg" src="" alt="Monthly totals"></div>'
       + '<div class="col"><div style="font-weight:600">Average/day</div><img id="avgImg" src="" alt="Average/day"></div>'
       + '<div class="col"><div style="font-weight:600">YTD Distribution (by slab)</div>' + buildBinTableHTMLFromCountsTotals(ytdCounts, ytdTotals) + '</div></div>';
 
-    // Average per month table
-    html += '<h3 style="margin-top:18px">Average Daily Spending (per month</h3><table><thead><tr><th>Month</th><th style="text-align:right">Total</th><th style="text-align:right">Avg / day</th></tr></thead><tbody>';
-    const avgPerMonth = monthKeys.map(k => { const total = monthlyMap.get(k) || 0; const days = daysInMonthFromKey(k); return { key:k, total, avg: days? total/days : 0 }; });
+    // avg/day table
+    html += '<h3 style="margin-top:18px">Average Daily Spending (per month)</h3><table><thead><tr><th>Month</th><th style="text-align:right">Total</th><th style="text-align:right">Avg / day</th></tr></thead><tbody>';
+    const avgPerMonth = monthKeys.map(k => { const total = toNumberAmt(monthlyMap.get(k) || 0); const days = daysInMonthFromKey(k); return { key:k, total, avg: days? total/days : 0 }; });
     avgPerMonth.forEach(x => { html += '<tr><td>' + monthLabelFromKey(x.key) + '</td><td style="text-align:right;color:' + totalColor(x.total) + '">' + formatINR(x.total) + '</td><td style="text-align:right;color:' + avgColor(x.avg) + '">' + formatINR(x.avg) + '</td></tr>'; });
     html += '</tbody></table>';
 
-    // Per-month details: stacked vertically (one after another)
+    // per-month details stacked vertically
     html += '<h3 style="margin-top:18px">Per-month Details</h3>';
     perMonthUrls.forEach((pm, idx) => {
       html += '<div class="month-block"><div class="left"><h4 style="margin:0">' + pm.label + '</h4><div class="smallcap">Daily Spend</div><img id="dailyImg' + idx + '" src="" alt="Daily spend"></div>'
         + '<div class="right dist"><div class="smallcap">Distribution (by slab)</div>' + pm.tableHTML + '</div></div>';
     });
 
-    // Transactions (optional)
+    // transactions
     if(includeTx){
       html += '<h3 style="margin-top:18px">Transactions (filtered)</h3><table><thead><tr><th>Date</th><th>Deposit</th><th>Withdrawal</th><th>Remarks</th></tr></thead><tbody>';
       for(const t of filtered){
         const d = t.date ? t.date.toLocaleDateString('en-GB') : '';
-        const depVal = t.deposit && t.deposit>0 ? t.deposit : 0;
-        const witVal = t.withdrawal && t.withdrawal>0 ? t.withdrawal : 0;
-        const depHtml = depVal ? ('<span style="color:#1f9f3f;font-weight:700">' + formatINR(depVal) + '</span>') : '';
-        const witHtml = witVal ? ('<span style="color:#c0392b;font-weight:700">' + formatINR(witVal) + '</span>') : '';
+        const depVal = toNumberAmt(t.deposit || 0);
+        const witVal = toNumberAmt(t.withdrawal || 0);
+        const depHtml = depVal ? ('<span style="color:#16a34a;font-weight:700">' + formatINR(depVal) + '</span>') : '';
+        const witHtml = witVal ? ('<span style="color:#ef4444;font-weight:700">' + formatINR(witVal) + '</span>') : '';
         const rmk = sanitize(t.remarks || '');
         html += '<tr><td>' + d + '</td><td style="text-align:right">' + depHtml + '</td><td style="text-align:right">' + witHtml + '</td><td>' + rmk + '</td></tr>';
       }
@@ -825,16 +1045,14 @@ async function exportFilteredPDF(){
 
     html += '<div style="margin-top:12px;color:#666;font-size:12px">Report generated by Expense Tracker</div></div>';
 
-    // Wire print/close in preview (escape closing tag)
+    // wire print & close (escape closing script tag)
     html += '<script>document.addEventListener("DOMContentLoaded", function(){ var p = document.getElementById("printSaveBtn"); var c = document.getElementById("closeBtn"); if(p) p.addEventListener("click", function(){ try{ window.print(); }catch(e){ console.warn("print error", e); } }); if(c) c.addEventListener("click", function(){ window.close(); }); });<\/script>';
-
-    html += '</body></html>';
 
     preview.document.open();
     preview.document.write(html);
     preview.document.close();
 
-    // assign blob urls to preview images
+    // set images after preview loads
     const setImages = () => {
       try{
         const mImg = preview.document.getElementById('monthlyImg');
@@ -844,7 +1062,6 @@ async function exportFilteredPDF(){
         perMonthUrls.forEach((pm, i) => {
           const sel = preview.document.getElementById('dailyImg' + i);
           if(sel) sel.src = pm.dailyUrl;
-          // revoke after a minute
           setTimeout(()=>{ try{ URL.revokeObjectURL(pm.dailyUrl); }catch(e){} }, 60000);
         });
         setTimeout(()=>{ try{ URL.revokeObjectURL(monthlyUrl); URL.revokeObjectURL(avgUrl); }catch(e){} }, 60000);
@@ -861,11 +1078,10 @@ async function exportFilteredPDF(){
     }
 
   } catch(err){
-    console.error('Export error (vertical months):', err);
+    console.error('Export error (bar-chart exporter with caps/colors):', err);
     alert('Failed to create report: ' + (err && err.message ? err.message : err));
   }
 }
-
 
 /* init empty */
 transactions = []; filtered = [];
