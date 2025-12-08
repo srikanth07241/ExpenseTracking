@@ -1,0 +1,667 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Gold Investment Planner</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+    }
+
+    .page {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 0.5rem;
+      text-align: center;
+    }
+
+    .subtitle {
+      font-size: 0.9rem;
+      color: #9ca3af;
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+
+    .card {
+      background: #020617;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+      border: 1px solid #1f2937;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    @media (min-width: 640px) {
+      .form-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    label {
+      font-size: 0.85rem;
+      color: #d1d5db;
+    }
+
+    input, select {
+      border-radius: 8px;
+      padding: 8px 10px;
+      border: 1px solid #374151;
+      background: #020617;
+      color: #e5e7eb;
+      font-size: 0.9rem;
+      width: 100%;
+    }
+
+    input::placeholder {
+      color: #6b7280;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 1px #38bdf8;
+    }
+
+    .field-inline {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .field-inline span {
+      font-size: 0.85rem;
+      color: #9ca3af;
+      white-space: nowrap;
+    }
+
+    .actions {
+      margin-top: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+    }
+
+    button {
+      border-radius: 999px;
+      border: none;
+      padding: 10px 18px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg,#22c55e,#16a34a);
+      color: #022c22;
+    }
+
+    .btn-secondary {
+      background: #020617;
+      color: #e5e7eb;
+      border: 1px solid #4b5563;
+    }
+
+    .btn-primary:active,
+    .btn-secondary:active {
+      transform: translateY(1px);
+    }
+
+    .results {
+      margin-top: 16px;
+      background: #020617;
+      border-radius: 12px;
+      padding: 12px;
+      border: 1px solid #1f2937;
+    }
+
+    .summary-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-size: 0.85rem;
+      margin-bottom: 8px;
+    }
+
+    .summary-item {
+      flex: 1 1 120px;
+      background: #020617;
+      border-radius: 8px;
+      padding: 8px;
+      border: 1px solid #111827;
+    }
+
+    .summary-label {
+      color: #9ca3af;
+      font-size: 0.75rem;
+      margin-bottom: 2px;
+    }
+
+    .summary-value {
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+      margin-top: 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+      min-width: 620px;
+    }
+
+    thead {
+      background: #020617;
+    }
+
+    th, td {
+      text-align: right;
+      padding: 6px 8px;
+      border-bottom: 1px solid #1f2937;
+      white-space: nowrap;
+    }
+
+    th:first-child, td:first-child {
+      text-align: left;
+    }
+
+    th {
+      font-weight: 600;
+      color: #9ca3af;
+      position: sticky;
+      top: 0;
+      background: #020617;
+      z-index: 1;
+    }
+
+    tbody tr:nth-child(even) {
+      background: #020617;
+    }
+
+    /* Highlight end of tenure row */
+    .tenure-row {
+      background: #111827 !important;
+      font-weight: 600;
+    }
+
+    .tenure-row td:first-child {
+      border-left: 3px solid #22c55e;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      background: #0f172a;
+      color: #9ca3af;
+      border: 1px solid #1f2937;
+    }
+
+    .note {
+      font-size: 0.75rem;
+      color: #9ca3af;
+      margin-top: 6px;
+    }
+
+    .error {
+      margin-top: 8px;
+      color: #fecaca;
+      font-size: 0.8rem;
+    }
+
+    /* Print styles for “Download / Print PDF” */
+    @media print {
+      body {
+        background: #ffffff;
+        color: #000000;
+      }
+
+      .page {
+        padding: 0;
+      }
+
+      .card {
+        box-shadow: none;
+        border: none;
+      }
+
+      /* Hide only buttons / action row, keep inputs visible */
+      .actions,
+      button {
+        display: none !important;
+      }
+
+      h1, .subtitle {
+        text-align: left;
+      }
+
+      /* Make table fully visible on PDF */
+      .table-wrapper {
+        overflow: visible !important;
+      }
+
+      table {
+        min-width: 100% !important;   /* fit to page width */
+        font-size: 0.75rem;           /* slightly smaller for PDF */
+      }
+
+      th, td {
+        white-space: normal !important;  /* allow wrapping */
+        border-bottom-color: #e5e7eb;
+      }
+
+      /* Sticky headers not needed for PDF, avoids clipping */
+      th {
+        position: static !important;
+      }
+
+      /* Strong highlight for end of tenure row in PDF */
+      .tenure-row {
+        background: #e5e7eb !important;
+        color: #111827 !important;
+      }
+
+      .tenure-row td:first-child {
+        border-left: 3px solid #22c55e !important;
+      }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+  <h1>Gold Investment Planner</h1>
+  <div class="subtitle">
+    Plan step-up investments in gold, see future value &amp; real value after inflation.
+  </div>
+
+  <div class="card" id="plannerCard">
+
+    <div class="form-grid">
+      <!-- Gold rate -->
+      <div class="field">
+        <label for="goldRate">Today's gold rate (₹ per gram)</label>
+        <input type="number" id="goldRate" placeholder="e.g. 7500" step="0.01" min="0">
+      </div>
+
+      <!-- Frequency (yearly / monthly) -->
+      <div class="field">
+        <label for="frequency">Investment frequency</label>
+        <select id="frequency">
+          <option value="yearly">Yearly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+      </div>
+
+      <!-- Planned investment -->
+      <div class="field">
+        <label for="plannedInvestment">Planned investment amount (₹ per period)</label>
+        <input type="number" id="plannedInvestment" placeholder="e.g. 100000" step="0.01" min="0">
+      </div>
+
+      <!-- Step-up % -->
+      <div class="field">
+        <label for="stepUp">
+          Step-up in investment (% per year)
+        </label>
+        <div class="field-inline">
+          <input type="number" id="stepUp" placeholder="e.g. 5" step="0.01" min="0">
+          <span class="badge">applied once every year</span>
+        </div>
+      </div>
+
+      <!-- Growth rate -->
+      <div class="field">
+        <label for="growthRate">Estimated gold price growth (% per year)</label>
+        <input type="number" id="growthRate" placeholder="e.g. 7" step="0.01">
+      </div>
+
+      <!-- Inflation rate -->
+      <div class="field">
+        <label for="inflationRate">Expected inflation (% per year)</label>
+        <input type="number" id="inflationRate" placeholder="e.g. 5" step="0.01">
+      </div>
+
+      <!-- Tenure & unit -->
+      <div class="field">
+        <label for="tenureValue" id="tenureLabel">Tenure of investment (years)</label>
+        <input type="number" id="tenureValue" placeholder="e.g. 10" min="1" step="1">
+      </div>
+
+      <div class="field">
+        <label for="tenureUnit">Tenure unit</label>
+        <select id="tenureUnit">
+          <option value="years">Years</option>
+          <option value="months">Months</option>
+        </select>
+        <span class="note">Frequency &amp; tenure unit can be independent. Example: invest monthly for 7 years.</span>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn-primary" onclick="calculateGoldPlan()">
+        ▶ Calculate
+      </button>
+      <button class="btn-secondary" id="printBtn" style="display:none;" onclick="window.print()">
+        ⬇ Download / Print PDF
+      </button>
+    </div>
+
+    <div id="errorBox" class="error" style="display:none;"></div>
+
+    <div id="results" class="results" style="display:none;">
+      <div class="summary-row">
+        <div class="summary-item">
+          <div class="summary-label">Total invested over tenure</div>
+          <div class="summary-value" id="summaryInvested">₹0</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">Gold accumulated by end of tenure</div>
+          <div class="summary-value" id="summaryGold">0 g</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">Value at end of tenure (nominal)</div>
+          <div class="summary-value" id="summaryNominal">₹0</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">Real value in today's ₹ (inflation-adjusted)</div>
+          <div class="summary-value" id="summaryReal">₹0</div>
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+          <tr>
+            <th>Time</th>
+            <th>Gold accumulated (g)</th>
+            <th>Total invested (₹)</th>
+            <th>Nominal value (₹ at that time)</th>
+            <th>Real value (₹ in today's money)</th>
+          </tr>
+          </thead>
+          <tbody id="resultsTableBody">
+          <!-- Rows injected by JS -->
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note">
+        Note: This is a simplified projection assuming constant growth &amp; inflation rates,
+        and yearly step-up in investment. Actual returns will differ.
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  const frequencySelect = document.getElementById('frequency');
+  const tenureLabel = document.getElementById('tenureLabel');
+  const tenureUnitSelect = document.getElementById('tenureUnit');
+  const errorBox = document.getElementById('errorBox');
+  const resultsContainer = document.getElementById('results');
+  const tableBody = document.getElementById('resultsTableBody');
+  const printBtn = document.getElementById('printBtn');
+
+  // Update tenure label when tenure unit changes
+  tenureUnitSelect.addEventListener('change', () => {
+    const unit = tenureUnitSelect.value;
+    tenureLabel.textContent = unit === 'years'
+      ? 'Tenure of investment (years)'
+      : 'Tenure of investment (months)';
+  });
+
+  function formatReadableIndian(value) {
+    if (!isFinite(value)) return '0';
+    const abs = Math.abs(value);
+    let short = value;
+    let suffix = '';
+
+    if (abs >= 1e7) {
+      short = value / 1e7;
+      suffix = ' Cr';
+    } else if (abs >= 1e5) {
+      short = value / 1e5;
+      suffix = ' Lakh';
+    } else if (abs >= 1e3) {
+      short = value / 1e3;
+      suffix = 'K';
+    } else {
+      short = value;
+    }
+
+    return short.toFixed(2) + suffix;
+  }
+
+  function formatCurrency(value) {
+    if (!isFinite(value)) return '₹0';
+    const full = value.toLocaleString('en-IN', {
+      maximumFractionDigits: 2,
+      minimumFractionDigits: 2
+    });
+    const short = formatReadableIndian(value);
+    return `₹${full} (${short})`;
+  }
+
+  function formatNumber(value, digits = 2) {
+    if (!isFinite(value)) return '0';
+    return value.toLocaleString('en-IN', {
+      maximumFractionDigits: digits,
+      minimumFractionDigits: digits
+    });
+  }
+
+  function calculateGoldPlan() {
+    errorBox.style.display = 'none';
+    errorBox.textContent = '';
+    resultsContainer.style.display = 'none';
+    tableBody.innerHTML = '';
+    printBtn.style.display = 'none';  // hide PDF button until successful calc
+
+    const goldRate = parseFloat(document.getElementById('goldRate').value);
+    const frequency = frequencySelect.value;        // 'yearly' or 'monthly'
+    const plannedInvestment = parseFloat(document.getElementById('plannedInvestment').value);
+    const stepUpPercent = parseFloat(document.getElementById('stepUp').value) || 0;
+    const growthRatePercent = parseFloat(document.getElementById('growthRate').value);
+    const inflationRatePercent = parseFloat(document.getElementById('inflationRate').value);
+    const tenureValue = parseInt(document.getElementById('tenureValue').value, 10);
+    const tenureUnit = tenureUnitSelect.value;     // 'years' or 'months'
+
+    // Basic validation
+    if (!goldRate || goldRate <= 0 ||
+        !plannedInvestment || plannedInvestment <= 0 ||
+        !tenureValue || tenureValue <= 0 ||
+        isNaN(growthRatePercent) ||
+        isNaN(inflationRatePercent)) {
+      errorBox.textContent = 'Please fill all required fields with valid numbers (gold rate, investment amount, tenure, growth & inflation).';
+      errorBox.style.display = 'block';
+      return;
+    }
+
+    const stepUp = stepUpPercent / 100;
+    const growthAnnual = growthRatePercent / 100;
+    const inflAnnual = inflationRatePercent / 100;
+
+    // Convert tenure to years and to number of contribution periods
+    const tenureYears = tenureUnit === 'years' ? tenureValue : tenureValue / 12;
+    const periodsPerYear = (frequency === 'yearly') ? 1 : 12;
+    const periods = (frequency === 'yearly')
+      ? Math.round(tenureYears)             // one contribution per year
+      : Math.round(tenureYears * 12);       // one contribution per month
+
+    if (periods <= 0) {
+      errorBox.textContent = 'Tenure is too short to simulate. Increase years/months.';
+      errorBox.style.display = 'block';
+      return;
+    }
+
+    // Per-period growth & inflation (for the contribution timing)
+    const growthPerPeriod = (frequency === 'yearly')
+      ? growthAnnual
+      : Math.pow(1 + growthAnnual, 1 / 12) - 1;
+
+    const inflPerPeriod = (frequency === 'yearly')
+      ? inflAnnual
+      : Math.pow(1 + inflAnnual, 1 / 12) - 1;
+
+    let totalInvested = 0;
+    let totalGold = 0;
+
+    // Simulate contributions over full tenure (for final totals)
+    for (let i = 0; i < periods; i++) {
+      // Determine which "year number" we are in for step-up purposes
+      const yearIndex = (frequency === 'yearly')
+        ? i
+        : Math.floor(i / 12); // step-up every 12 months
+
+      const contributionThisPeriod = plannedInvestment * Math.pow(1 + stepUp, yearIndex);
+
+      // Gold price at this period
+      const priceThisPeriod = goldRate * Math.pow(1 + growthPerPeriod, i);
+
+      const goldBoughtThisPeriod = contributionThisPeriod / priceThisPeriod;
+
+      totalInvested += contributionThisPeriod;
+      totalGold += goldBoughtThisPeriod;
+    }
+
+    // Value at end of tenure (in years)
+    const priceAtEndTenure = goldRate * Math.pow(1 + growthAnnual, tenureYears);
+    const nominalEndValue = totalGold * priceAtEndTenure;
+    const realEndValue = nominalEndValue / Math.pow(1 + inflAnnual, tenureYears);
+
+    // Fill summary
+    document.getElementById('summaryInvested').textContent = formatCurrency(totalInvested);
+    document.getElementById('summaryGold').textContent = formatNumber(totalGold, 3) + ' g';
+    document.getElementById('summaryNominal').textContent = formatCurrency(nominalEndValue);
+    document.getElementById('summaryReal').textContent = formatCurrency(realEndValue);
+
+    // ---------- Table rows ----------
+
+    // Helper: recompute totals up to a given number of years from today
+    function computeTotalsUpToYears(hYears) {
+      let invested = 0;
+      let gold = 0;
+      for (let i = 0; i < periods; i++) {
+        const tYears = i / periodsPerYear; // contribution time
+        if (tYears >= hYears - 1e-9) break;
+
+        const yearIndex = (frequency === 'yearly')
+          ? i
+          : Math.floor(i / 12);
+
+        const contributionThisPeriod = plannedInvestment * Math.pow(1 + stepUp, yearIndex);
+        const priceThisPeriod = goldRate * Math.pow(1 + growthPerPeriod, i);
+        const goldBoughtThisPeriod = contributionThisPeriod / priceThisPeriod;
+
+        invested += contributionThisPeriod;
+        gold += goldBoughtThisPeriod;
+      }
+      return { invested, gold };
+    }
+
+    // 1) Snapshots every 5 years (up to just before full tenure)
+    for (let y = 5; y < tenureYears - 1e-9; y += 5) {
+      const { invested, gold } = computeTotalsUpToYears(y);
+
+      const priceAtHorizon = goldRate * Math.pow(1 + growthAnnual, y);
+      const nominalValue = gold * priceAtHorizon;
+      const realValue = nominalValue / Math.pow(1 + inflAnnual, y);
+
+      const tr = document.createElement('tr');
+      const appendCell = (text) => {
+        const td = document.createElement('td');
+        td.textContent = text;
+        tr.appendChild(td);
+      };
+
+      appendCell(`After ${y} years`);
+      appendCell(formatNumber(gold, 3) + ' g');
+      appendCell(formatCurrency(invested));
+      appendCell(formatCurrency(nominalValue));
+      appendCell(formatCurrency(realValue));
+
+      tableBody.appendChild(tr);
+    }
+
+    // 2) End of tenure & +5/+15/+20/+25 years using final totals
+    const horizons = [
+      { label: `End of tenure (${formatNumber(tenureYears, 1)} yrs)`, extraYears: 0 },
+      { label: `Tenure + 5 years`, extraYears: 5 },
+      { label: `Tenure + 15 years`, extraYears: 15 },
+      { label: `Tenure + 20 years`, extraYears: 20 },
+      { label: `Tenure + 25 years`, extraYears: 25 }
+    ];
+
+    horizons.forEach(h => {
+      const totalYearsFromToday = tenureYears + h.extraYears;
+
+      const priceAtHorizon = goldRate * Math.pow(1 + growthAnnual, totalYearsFromToday);
+      const nominalValue = totalGold * priceAtHorizon;
+      const realValue = nominalValue / Math.pow(1 + inflAnnual, totalYearsFromToday);
+
+      const tr = document.createElement('tr');
+
+      // Highlight the "End of tenure" row
+      if (h.extraYears === 0) {
+        tr.classList.add('tenure-row');
+      }
+
+      const appendCell = (text) => {
+        const td = document.createElement('td');
+        td.textContent = text;
+        tr.appendChild(td);
+      };
+
+      appendCell(h.label);
+      appendCell(formatNumber(totalGold, 3) + ' g');
+      appendCell(formatCurrency(totalInvested));
+      appendCell(formatCurrency(nominalValue));
+      appendCell(formatCurrency(realValue));
+
+      tableBody.appendChild(tr);
+    });
+
+    resultsContainer.style.display = 'block';
+    printBtn.style.display = 'inline-flex'; // show PDF button only after successful calc
+  }
+</script>
+</body>
+</html>
