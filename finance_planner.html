@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Investment Planner (Gold / Stock / MF / Real Estate)</title>
+  <title>Investment Planner</title>
   <meta name="viewport"
         content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no">
 
@@ -279,7 +279,7 @@
 
     .emi-wrapper table {
       font-size: 0.78rem;
-      min-width: 820px;
+      min-width: 900px;
     }
 
     /* Print styles */
@@ -334,9 +334,9 @@
 </head>
 <body>
 <div class="page">
-  <h1>Investment Planner</h1>
-  <div class="subtitle">
-    Gold, Stocks, Mutual Funds &amp; Real Estate – step-up SIP &amp; property projections.
+  <h1 id="mainTitle">Investment Planner - Gold</h1>
+  <div class="subtitle" id="subTitle">
+    Projections, accumulation, net worth & real value for gold investments.
   </div>
 
   <div class="card">
@@ -485,7 +485,7 @@
         </div>
         <div class="field">
           <label for="reLoanTenure">Tenure of loan (years)</label>
-          <input type="number" id="reLoanTenure" placeholder="e.g. 20" min="1" step="1">
+          <input type="number" id="reLoanTenure" placeholder="e.g. 20" min="0" step="1">
         </div>
         <div class="field">
           <label for="reRentPerMonth">Estimated rent (₹ per month)</label>
@@ -524,7 +524,7 @@
             <div class="summary-value" id="reSummarySavings">₹0</div>
           </div>
           <div class="summary-item">
-            <div class="summary-label">Approx EMI (first month)</div>
+            <div class="summary-label">Approx EMI</div>
             <div class="summary-value" id="reSummaryEmi">₹0</div>
           </div>
           <div class="summary-item">
@@ -561,6 +561,10 @@
             <div class="summary-label">Property value in today's money (real)</div>
             <div class="summary-value" id="reSummaryPropReal">₹0</div>
           </div>
+          <div class="summary-item">
+            <div class="summary-label">Effective amount paid for loan (EMI − Rent)</div>
+            <div class="summary-value" id="reSummaryNetLoan">₹0</div>
+          </div>
         </div>
 
         <h3 class="section-title">Projections</h3>
@@ -571,6 +575,7 @@
               <th>Year</th>
               <th>Total EMI paid so far (₹)</th>
               <th>Total rent received so far (₹)</th>
+              <th>Effective EMI paid (EMI − Rent)</th>
               <th>Asset value (₹)</th>
               <th>Real asset value (₹, today's money)</th>
             </tr>
@@ -593,6 +598,8 @@
               <th>Principal paid (₹)</th>
               <th>Interest paid (₹)</th>
               <th>Total EMI (₹)</th>
+              <th>Rent received (₹)</th>
+              <th>Effective EMI paid (₹)</th>
               <th>Principal pending (₹)</th>
               <th>% of principal paid</th>
               <th>% of loan paid</th>
@@ -614,6 +621,9 @@
   const tabs = document.querySelectorAll('.tab-btn');
   const sipSection = document.getElementById('sipSection');
   const reSection = document.getElementById('reSection');
+
+  const mainTitleEl = document.getElementById('mainTitle');
+  const subTitleEl = document.getElementById('subTitle');
 
   // ===== SIP DOM refs =====
   const frequencySelect = document.getElementById('frequency');
@@ -645,6 +655,7 @@
   const reSummaryRent = document.getElementById('reSummaryRent');
   const reSummaryPropNominal = document.getElementById('reSummaryPropNominal');
   const reSummaryPropReal = document.getElementById('reSummaryPropReal');
+  const reSummaryNetLoan = document.getElementById('reSummaryNetLoan');
 
   const emiScheduleTitle = document.getElementById('emiScheduleTitle');
   const emiScheduleContainer = document.getElementById('emiScheduleContainer');
@@ -657,6 +668,29 @@
 
   // For EMI schedule
   let reEmiSchedule = null;
+
+  // ===== Header updater =====
+  function updateHeaderForAsset() {
+    let title = 'Investment Planner';
+    let subtitle = '';
+
+    if (currentAsset === 'gold') {
+      title = 'Investment Planner - Gold';
+      subtitle = 'Projections, accumulation, net worth & real value for gold investments.';
+    } else if (currentAsset === 'stock') {
+      title = 'Investment Planner - Stocks';
+      subtitle = 'Projections, accumulation, net worth & real value for stock investments.';
+    } else if (currentAsset === 'mf') {
+      title = 'Investment Planner - Mutual Funds';
+      subtitle = 'Projections, accumulation, net worth & real value for mutual fund SIPs.';
+    } else if (currentAsset === 'realestate') {
+      title = 'Investment Planner - Real Estate';
+      subtitle = 'Projections, loan cashflows, EMI schedules, property values & rental incomes.';
+    }
+
+    mainTitleEl.textContent = title;
+    subTitleEl.textContent = subtitle;
+  }
 
   // ===== SIP helpers for state =====
   function readFormState() {
@@ -725,6 +759,7 @@
       summaryQtyLabelEl.textContent = 'Units accumulated by end of tenure';
     }
     updateGrowthLabel();
+    updateHeaderForAsset();
   }
 
   // ===== Tab switching =====
@@ -773,6 +808,8 @@
         emiScheduleBody.innerHTML = '';
         reEmiSchedule = null;
       }
+
+      updateHeaderForAsset();
     });
   });
 
@@ -783,6 +820,7 @@
 
   applyAssetConfig();
   updateTenureLabel();
+  updateHeaderForAsset();
 
   // ===== Formatting helpers =====
   function formatReadableIndian(value) {
@@ -829,6 +867,8 @@
   function calculatePlan() {
     if (currentAsset === 'realestate') return;
 
+    updateHeaderForAsset();
+
     errorBox.style.display = 'none';
     errorBox.textContent = '';
     resultsContainer.style.display = 'none';
@@ -874,14 +914,12 @@
       growthAnnual = Math.pow(1 + growthInput, 12) - 1;
     }
 
-    let tenureYears, periods, periodsPerYear;
+    let tenureYears, periods;
     if (frequency === 'yearly') {
       tenureYears = tenureValue;
-      periodsPerYear = 1;
       periods = tenureValue;
     } else {
       tenureYears = tenureValue / 12;
-      periodsPerYear = 12;
       periods = tenureValue;
     }
 
@@ -996,6 +1034,8 @@
   function calculateRealEstate() {
     if (currentAsset !== 'realestate') return;
 
+    updateHeaderForAsset();
+
     reErrorBox.style.display = 'none';
     reErrorBox.textContent = '';
     reResults.style.display = 'none';
@@ -1007,26 +1047,65 @@
     emiScheduleBody.innerHTML = '';
 
     const propertyValue = parseFloat(document.getElementById('rePropertyValue').value);
-    const investedSavings = parseFloat(document.getElementById('reInvestedSavings').value) || 0;
-    const loanAmount = parseFloat(document.getElementById('reLoanAmount').value) || 0;
+    let investedSavings = parseFloat(document.getElementById('reInvestedSavings').value);
+    let loanAmount = parseFloat(document.getElementById('reLoanAmount').value);
     const interestRate = parseFloat(document.getElementById('reInterestRate').value) || 0;
-    const loanTenureYears = parseInt(document.getElementById('reLoanTenure').value, 10);
+    let loanTenureYears = parseInt(document.getElementById('reLoanTenure').value, 10);
     const rentPerMonthInitial = parseFloat(document.getElementById('reRentPerMonth').value) || 0;
     const rentIncrease = parseFloat(document.getElementById('reRentIncrease').value) || 0;
     const inflPercent = parseFloat(document.getElementById('reInflation').value);
     const appPercent = parseFloat(document.getElementById('reAppreciation').value);
 
+    investedSavings = isNaN(investedSavings) ? 0 : investedSavings;
+    loanAmount = isNaN(loanAmount) ? 0 : loanAmount;
+    loanTenureYears = isNaN(loanTenureYears) ? 0 : loanTenureYears;
+
     if (!propertyValue || propertyValue <= 0 ||
-        !loanTenureYears || loanTenureYears <= 0 ||
         isNaN(inflPercent) ||
         isNaN(appPercent)) {
-      reErrorBox.textContent = 'Please fill property value, loan tenure, inflation & appreciation with valid numbers. Other fields can be 0 if not applicable.';
+      reErrorBox.textContent = 'Please fill property value, inflation & appreciation with valid numbers. Other fields can be 0 if not applicable.';
+      reErrorBox.style.display = 'block';
+      return;
+    }
+
+    // Down payment vs property sanity
+    if (investedSavings > propertyValue + 1e-6) {
+      reErrorBox.textContent = 'Down payment cannot be more than the property value.';
+      reErrorBox.style.display = 'block';
+      return;
+    }
+
+    // Loan + downpayment must equal property value
+    const sumFunding = investedSavings + loanAmount;
+    if (Math.abs(sumFunding - propertyValue) > 1e-2) {
+      if (sumFunding > propertyValue) {
+        reErrorBox.textContent = 'Down payment + loan is greater than the property value. Please correct the inputs.';
+      } else {
+        reErrorBox.textContent = 'Down payment + loan is less than the property value. Please correct the inputs.';
+      }
+      reErrorBox.style.display = 'block';
+      return;
+    }
+
+    // Loan / tenure consistency
+    if (loanAmount === 0 && loanTenureYears > 0) {
+      reErrorBox.textContent = 'Loan tenure should be 0 when loan amount is 0.';
+      reErrorBox.style.display = 'block';
+      return;
+    }
+
+    if (loanAmount > 0 && (loanTenureYears <= 0)) {
+      reErrorBox.textContent = 'Please enter a valid loan tenure (years) when loan amount is non-zero.';
       reErrorBox.style.display = 'block';
       return;
     }
 
     const inflRate = inflPercent / 100;
     const appRate = appPercent / 100;
+
+    // Summary horizon: today (0 years) if no loan; loan tenure if loan exists
+    const summaryYears = loanAmount > 0 ? loanTenureYears : 0;
+    const nMonths = loanAmount > 0 ? loanTenureYears * 12 : 0;
 
     let totalPrincipalPaid = 0;
     let totalInterestPaid = 0;
@@ -1037,7 +1116,6 @@
 
     // ---- EMI schedule & totals (standard amortization) ----
     if (loanAmount > 0) {
-      const nMonths = loanTenureYears * 12;
       const monthlyRate = interestRate > 0 ? (interestRate / 100 / 12) : 0;
 
       let emiBase;
@@ -1116,69 +1194,79 @@
     reSummaryLoanPayout.textContent = formatCurrency(totalLoanPayout);
     reSummaryTotalOutflow.textContent = formatCurrency(totalCashOutflow);
 
-    // ---- Rent (earned) ----
+    // ---- Rent (earned) as monthly, with yearly increments ----
     const rentIncRate = rentIncrease / 100;
     const maxYears = 40;
-    const cumulativeRentAtYear = {};
-    let monthlyRent = rentPerMonthInitial;
+    const maxMonths = maxYears * 12;
+    const cumulativeRentAtMonth = [];
+    let currentRent = rentPerMonthInitial;
     let cumRent = 0;
 
-    for (let y = 1; y <= maxYears; y++) {
-      if (y === 1) {
-        monthlyRent = rentPerMonthInitial;
-      } else {
-        monthlyRent = monthlyRent * (1 + rentIncRate);
+    for (let m = 1; m <= maxMonths; m++) {
+      const rentThisMonth = currentRent;
+      cumRent += rentThisMonth;
+      cumulativeRentAtMonth[m] = cumRent;
+
+      if (m % 12 === 0) {
+        currentRent = currentRent * (1 + rentIncRate);
       }
-      const annualRent = monthlyRent * 12;
-      cumRent += annualRent;
-      cumulativeRentAtYear[y] = cumRent;
     }
 
-    const totalRentOverLoan = cumulativeRentAtYear[loanTenureYears] || 0;
+    const totalRentOverLoan = (loanAmount > 0 && summaryYears > 0)
+      ? (cumulativeRentAtMonth[nMonths] || 0)
+      : 0;
 
-    // ---- Property appreciation ----
-    const propValueEndNominal = propertyValue * Math.pow(1 + appRate, loanTenureYears);
-    const propValueEndReal = propValueEndNominal / Math.pow(1 + inflRate, loanTenureYears);
+    // ---- Property appreciation (summary) ----
+    const propValueEndNominal = propertyValue * Math.pow(1 + appRate, summaryYears);
+    const propValueEndReal = propValueEndNominal / Math.pow(1 + inflRate, summaryYears);
 
     reSummaryRent.textContent = formatCurrency(totalRentOverLoan);
     reSummaryPropNominal.textContent = formatCurrency(propValueEndNominal);
     reSummaryPropReal.textContent = formatCurrency(propValueEndReal);
 
+    const netLoanPaid = totalLoanPayout - totalRentOverLoan;
+    reSummaryNetLoan.textContent = formatCurrency(netLoanPaid);
+
     // ---- Projections table ----
     const horizons = [5, 10, 15, 20, 25, 30, 35, 40];
-    horizons.forEach(years => {
-      const y = years;
 
-      let loanPaidSoFar = 0;
-      if (loanAmount > 0) {
-        if (y >= loanTenureYears) {
-          loanPaidSoFar = totalEmiPaid;
-        } else {
-          loanPaidSoFar = cumulativeEmiAtYear[y] || 0;
-        }
-      }
+    horizons.forEach(y => {
+      const tr = document.createElement('tr');
 
-      const rentReceivedSoFar = cumulativeRentAtYear[y] || cumulativeRentAtYear[maxYears] || 0;
+      const hasLoan = loanAmount > 0;
+      const isWithinTenure = hasLoan && y <= loanTenureYears;
+
+      // EMI paid so far (only meaningful if loan exists and within tenure)
+      let emiPaidSoFar = (hasLoan && isWithinTenure)
+        ? (cumulativeEmiAtYear[y] || 0)
+        : null;
+
+      const monthIndex = Math.min(y * 12, maxMonths);
+      const rentReceivedSoFar = cumulativeRentAtMonth[monthIndex] || 0;
+
+      let effectiveEmi = (hasLoan && isWithinTenure)
+        ? emiPaidSoFar - rentReceivedSoFar
+        : null;
 
       const assetValueNominal = propertyValue * Math.pow(1 + appRate, y);
       const assetValueReal = assetValueNominal / Math.pow(1 + inflRate, y);
 
-      const tr = document.createElement('tr');
-      if (y === loanTenureYears) {
+      if (hasLoan && y === loanTenureYears) {
         tr.classList.add('tenure-row');
       }
 
-      const appendCell = (text) => {
+      const cel = txt => {
         const td = document.createElement('td');
-        td.textContent = text;
-        tr.appendChild(td);
+        td.textContent = txt;
+        return td;
       };
 
-      appendCell(`${y} years`);
-      appendCell(formatCurrency(loanPaidSoFar));
-      appendCell(formatCurrency(rentReceivedSoFar));
-      appendCell(formatCurrency(assetValueNominal));
-      appendCell(formatCurrency(assetValueReal));
+      tr.appendChild(cel(`${y} years`));
+      tr.appendChild(cel(hasLoan && isWithinTenure ? formatCurrency(emiPaidSoFar) : 'NA'));
+      tr.appendChild(cel(formatCurrency(rentReceivedSoFar)));
+      tr.appendChild(cel(hasLoan && isWithinTenure ? formatCurrency(effectiveEmi) : 'NA'));
+      tr.appendChild(cel(formatCurrency(assetValueNominal)));
+      tr.appendChild(cel(formatCurrency(assetValueReal)));
 
       reTableBody.appendChild(tr);
     });
@@ -1198,12 +1286,21 @@
           ? (row.cumEmi / totalEmiPaid) * 100
           : 0;
 
+        const m = row.month;
+        const rentThisMonth =
+          (cumulativeRentAtMonth[m] || 0) -
+          (cumulativeRentAtMonth[m - 1] || 0);
+
+        const effectiveEmi = row.emiTotal - rentThisMonth;
+
         const cells = [
           row.month,
           row.periodLabel,
           formatCurrency(row.principalPaid),
           formatCurrency(row.interestPaid),
           formatCurrency(row.emiTotal),
+          formatCurrency(rentThisMonth),
+          formatCurrency(effectiveEmi),
           formatCurrency(row.principalPending),
           formatNumber(principalPct, 2) + ' %',
           formatNumber(loanPct, 2) + ' %'
