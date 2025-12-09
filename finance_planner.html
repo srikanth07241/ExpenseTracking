@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Investment Planner (Gold / Stock / MF)</title>
-<meta name="viewport"
-      content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Investment Planner (Gold / Stock / MF / Real Estate)</title>
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no">
 
   <style>
     * { box-sizing: border-box; }
@@ -49,6 +49,7 @@
       display: flex;
       gap: 8px;
       margin-bottom: 12px;
+      flex-wrap: wrap;
     }
 
     .tab-btn {
@@ -60,6 +61,8 @@
       color: #e5e7eb;
       font-size: 0.85rem;
       cursor: pointer;
+      text-align: center;
+      min-width: 0;
     }
 
     .tab-btn.active {
@@ -98,7 +101,7 @@
       border: 1px solid #374151;
       background: #020617;
       color: #e5e7eb;
-      font-size: 16px; /* avoid iOS zoom on focus */
+      font-size: 16px; /* prevent iOS zoom on focus */
       width: 100%;
     }
 
@@ -228,7 +231,6 @@
 
     tbody tr:nth-child(even) { background: #020617; }
 
-    /* Highlight end of tenure row */
     .tenure-row {
       background: #111827 !important;
       font-weight: 600;
@@ -262,9 +264,26 @@
       font-size: 0.8rem;
     }
 
+    h3.section-title {
+      margin: 4px 0 6px;
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+
+    /* EMI schedule wrapper (scrollable) */
+    .emi-wrapper {
+      max-height: 260px;
+      overflow-y: auto;
+      margin-top: 8px;
+    }
+
+    .emi-wrapper table {
+      font-size: 0.78rem;
+      min-width: 820px;
+    }
+
     /* Print styles */
     @media print {
-      /* Force white background & black text everywhere */
       *, *::before, *::after {
         background: #ffffff !important;
         color: #000000 !important;
@@ -287,8 +306,10 @@
         display: none !important;
       }
 
-      .table-wrapper {
+      .table-wrapper,
+      .emi-wrapper {
         overflow: visible !important;
+        max-height: none !important;
       }
 
       table {
@@ -315,127 +336,273 @@
 <div class="page">
   <h1>Investment Planner</h1>
   <div class="subtitle">
-    Gold, Stocks &amp; Mutual Funds – step-up SIP with inflation-adjusted projections.
+    Gold, Stocks, Mutual Funds &amp; Real Estate – step-up SIP &amp; property projections.
   </div>
 
-  <div class="card" id="plannerCard">
+  <div class="card">
     <!-- Tabs -->
     <div class="tabs">
       <button class="tab-btn active" data-asset="gold">Gold</button>
       <button class="tab-btn" data-asset="stock">Stock</button>
       <button class="tab-btn" data-asset="mf">Mutual Fund</button>
+      <button class="tab-btn" data-asset="realestate">Real Estate</button>
     </div>
 
-    <div class="form-grid">
-      <!-- Rate field (hidden for MF) -->
-      <div class="field" id="goldRateField">
-        <label for="goldRate" id="rateLabel">Today's gold rate (₹ per gram)</label>
-        <input type="number" id="goldRate" placeholder="e.g. 7500" step="0.01" min="0">
-      </div>
+    <!-- ====== SIP SECTION (Gold / Stock / MF) ====== -->
+    <div id="sipSection">
+      <div class="form-grid">
+        <!-- Rate field (hidden for MF) -->
+        <div class="field" id="goldRateField">
+          <label for="goldRate" id="rateLabel">Today's gold rate (₹ per gram)</label>
+          <input type="number" id="goldRate" placeholder="e.g. 7500" step="0.01" min="0">
+        </div>
 
-      <!-- Frequency -->
-      <div class="field">
-        <label for="frequency">Investment frequency</label>
-        <select id="frequency">
-          <option value="yearly">Yearly</option>
-          <option value="monthly">Monthly</option>
-        </select>
-      </div>
+        <!-- Frequency -->
+        <div class="field">
+          <label for="frequency">Investment frequency</label>
+          <select id="frequency">
+            <option value="yearly">Yearly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+        </div>
 
-      <!-- Planned investment -->
-      <div class="field">
-        <label for="plannedInvestment">Planned investment amount (₹ per period)</label>
-        <input type="number" id="plannedInvestment" placeholder="e.g. 100000" step="0.01" min="0">
-      </div>
+        <!-- Planned investment -->
+        <div class="field">
+          <label for="plannedInvestment">Planned investment amount (₹ per period)</label>
+          <input type="number" id="plannedInvestment" placeholder="e.g. 100000" step="0.01" min="0">
+        </div>
 
-      <!-- Step-up % -->
-      <div class="field">
-        <label for="stepUp">
-          Step-up in investment (% per year)
-        </label>
-        <div class="field-inline">
-          <input type="number" id="stepUp" placeholder="e.g. 5" step="0.01" min="0">
-          <span class="badge">applied once every year</span>
+        <!-- Step-up % -->
+        <div class="field">
+          <label for="stepUp">
+            Step-up in investment (% per year)
+          </label>
+          <div class="field-inline">
+            <input type="number" id="stepUp" placeholder="e.g. 5" step="0.01" min="0">
+            <span class="badge">applied once every year</span>
+          </div>
+        </div>
+
+        <!-- Growth rate -->
+        <div class="field">
+          <label for="growthRate" id="growthLabel">Estimated gold price growth (% per year)</label>
+          <input type="number" id="growthRate" placeholder="e.g. 10" step="0.01">
+        </div>
+
+        <!-- Inflation rate -->
+        <div class="field">
+          <label for="inflationRate">Expected inflation (% per year)</label>
+          <input type="number" id="inflationRate" placeholder="e.g. 5" step="0.01">
+        </div>
+
+        <!-- Tenure -->
+        <div class="field">
+          <label for="tenureValue" id="tenureLabel">Tenure of investment (years)</label>
+          <input type="number" id="tenureValue" placeholder="e.g. 10" min="1" step="1">
+        </div>
+
+        <!-- Help text -->
+        <div class="field">
+          <span class="note">
+            Frequency decides tenure unit: yearly → years, monthly → months.
+          </span>
         </div>
       </div>
 
-      <!-- Growth rate -->
-      <div class="field">
-        <label for="growthRate" id="growthLabel">Estimated gold price growth (% per year)</label>
-        <input type="number" id="growthRate" placeholder="e.g. 10" step="0.01">
+      <div class="actions">
+        <button class="btn-primary" onclick="calculatePlan()">
+          ▶ Calculate
+        </button>
+        <button class="btn-secondary" id="printBtn" style="display:none;" onclick="window.print()">
+          ⬇ Download / Print PDF
+        </button>
       </div>
 
-      <!-- Inflation rate -->
-      <div class="field">
-        <label for="inflationRate">Expected inflation (% per year)</label>
-        <input type="number" id="inflationRate" placeholder="e.g. 5" step="0.01">
-      </div>
+      <div id="errorBox" class="error" style="display:none;"></div>
 
-      <!-- Tenure -->
-      <div class="field">
-        <label for="tenureValue" id="tenureLabel">Tenure of investment (years)</label>
-        <input type="number" id="tenureValue" placeholder="e.g. 10" min="1" step="1">
-      </div>
+      <div id="results" class="results" style="display:none;">
+        <div class="summary-row">
+          <div class="summary-item">
+            <div class="summary-label">Total invested over tenure</div>
+            <div class="summary-value" id="summaryInvested">₹0</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-label" id="summaryQtyLabel">Gold accumulated by end of tenure</div>
+            <div class="summary-value" id="summaryQty">0</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-label">Value at end of tenure (nominal)</div>
+            <div class="summary-value" id="summaryNominal">₹0</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-label">Real value in today's ₹ (inflation-adjusted)</div>
+            <div class="summary-value" id="summaryReal">₹0</div>
+          </div>
+        </div>
 
-      <!-- Help text -->
-      <div class="field">
-        <span class="note">
-          Frequency decides tenure unit: yearly → years, monthly → months.
-        </span>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+            <tr>
+              <th>Time</th>
+              <th id="qtyHeader">Gold accumulated (g)</th>
+              <th>Total invested (₹)</th>
+              <th>Nominal value (₹ at that time)</th>
+              <th>Real value (₹ in today's money)</th>
+            </tr>
+            </thead>
+            <tbody id="resultsTableBody">
+            <!-- rows injected by JS -->
+            </tbody>
+          </table>
+        </div>
+
+        <div class="note">
+          Growth is interpreted as % per year (for yearly SIP) or % per month (for monthly SIP).
+          Inflation is % per year. Actual returns will differ.
+        </div>
       </div>
     </div>
 
-    <div class="actions">
-      <button class="btn-primary" onclick="calculatePlan()">
-        ▶ Calculate
-      </button>
-      <button class="btn-secondary" id="printBtn" style="display:none;" onclick="window.print()">
-        ⬇ Download / Print PDF
-      </button>
-    </div>
-
-    <div id="errorBox" class="error" style="display:none;"></div>
-
-    <div id="results" class="results" style="display:none;">
-      <div class="summary-row">
-        <div class="summary-item">
-          <div class="summary-label">Total invested over tenure</div>
-          <div class="summary-value" id="summaryInvested">₹0</div>
+    <!-- ====== REAL ESTATE SECTION ====== -->
+    <div id="reSection" style="display:none;">
+      <div class="form-grid">
+        <div class="field">
+          <label for="rePropertyValue">Value of property (₹)</label>
+          <input type="number" id="rePropertyValue" placeholder="e.g. 10000000" step="0.01" min="0">
         </div>
-        <div class="summary-item">
-          <div class="summary-label" id="summaryQtyLabel">Gold accumulated by end of tenure</div>
-          <div class="summary-value" id="summaryQty">0</div>
+        <div class="field">
+          <label for="reInvestedSavings">Invested savings / down payment (₹)</label>
+          <input type="number" id="reInvestedSavings" placeholder="e.g. 2000000" step="0.01" min="0">
         </div>
-        <div class="summary-item">
-          <div class="summary-label">Value at end of tenure (nominal)</div>
-          <div class="summary-value" id="summaryNominal">₹0</div>
+        <div class="field">
+          <label for="reLoanAmount">Loan amount (₹)</label>
+          <input type="number" id="reLoanAmount" placeholder="e.g. 8000000" step="0.01" min="0">
         </div>
-        <div class="summary-item">
-          <div class="summary-label">Real value in today's ₹ (inflation-adjusted)</div>
-          <div class="summary-value" id="summaryReal">₹0</div>
+        <div class="field">
+          <label for="reInterestRate">Loan interest rate (% per year)</label>
+          <input type="number" id="reInterestRate" placeholder="e.g. 8.5" step="0.01" min="0">
+        </div>
+        <div class="field">
+          <label for="reLoanTenure">Tenure of loan (years)</label>
+          <input type="number" id="reLoanTenure" placeholder="e.g. 20" min="1" step="1">
+        </div>
+        <div class="field">
+          <label for="reRentPerMonth">Estimated rent (₹ per month)</label>
+          <input type="number" id="reRentPerMonth" placeholder="e.g. 25000" step="0.01" min="0">
+        </div>
+        <div class="field">
+          <label for="reRentIncrease">Rental increment (% per year)</label>
+          <input type="number" id="reRentIncrease" placeholder="e.g. 5" step="0.01" min="0">
+        </div>
+        <div class="field">
+          <label for="reInflation">Estimated average inflation (% per year)</label>
+          <input type="number" id="reInflation" placeholder="e.g. 5" step="0.01" min="0">
+        </div>
+        <div class="field">
+          <label for="reAppreciation">Estimated average appreciation of property (% per year)</label>
+          <input type="number" id="reAppreciation" placeholder="e.g. 8" step="0.01" min="0">
         </div>
       </div>
 
-      <div class="table-wrapper">
-        <table>
-          <thead>
-          <tr>
-            <th>Time</th>
-            <th id="qtyHeader">Gold accumulated (g)</th>
-            <th>Total invested (₹)</th>
-            <th>Nominal value (₹ at that time)</th>
-            <th>Real value (₹ in today's money)</th>
-          </tr>
-          </thead>
-          <tbody id="resultsTableBody">
-          <!-- Rows injected by JS -->
-          </tbody>
-        </table>
+      <div class="actions">
+        <button class="btn-primary" onclick="calculateRealEstate()">
+          ▶ Calculate
+        </button>
+        <button class="btn-secondary" id="rePrintBtn" style="display:none;" onclick="window.print()">
+          ⬇ Download / Print PDF
+        </button>
       </div>
 
-      <div class="note">
-        Growth is interpreted as % per year (for yearly SIP) or % per month (for monthly SIP).
-        Inflation is % per year. Actual returns will differ.
+      <div id="reErrorBox" class="error" style="display:none;"></div>
+
+      <div id="reResults" class="results" style="display:none;">
+        <h3 class="section-title">Spent</h3>
+        <div class="summary-row">
+          <div class="summary-item">
+            <div class="summary-label">Down payment (invested savings)</div>
+            <div class="summary-value" id="reSummarySavings">₹0</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-label">Approx EMI (first month)</div>
+            <div class="summary-value" id="reSummaryEmi">₹0</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-label">Total principal repaid</div>
+            <div class="summary-value" id="reSummaryPrincipal">₹0</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-label">Total interest cost</div>
+            <div class="summary-value" id="reSummaryInterest">₹0</div>
+          </div>
+        </div>
+        <div class="summary-row">
+          <div class="summary-item">
+            <div class="summary-label">Total loan payout (principal + interest)</div>
+            <div class="summary-value" id="reSummaryLoanPayout">₹0</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-label">Total cash outflow (down payment + EMI)</div>
+            <div class="summary-value" id="reSummaryTotalOutflow">₹0</div>
+          </div>
+        </div>
+
+        <h3 class="section-title">Earned</h3>
+        <div class="summary-row">
+          <div class="summary-item">
+            <div class="summary-label">Total rent received by end of loan tenure</div>
+            <div class="summary-value" id="reSummaryRent">₹0</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-label">Property value at end of tenure (nominal)</div>
+            <div class="summary-value" id="reSummaryPropNominal">₹0</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-label">Property value in today's money (real)</div>
+            <div class="summary-value" id="reSummaryPropReal">₹0</div>
+          </div>
+        </div>
+
+        <h3 class="section-title">Projections</h3>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+            <tr>
+              <th>Year</th>
+              <th>Total EMI paid so far (₹)</th>
+              <th>Total rent received so far (₹)</th>
+              <th>Asset value (₹)</th>
+              <th>Real asset value (₹, today's money)</th>
+            </tr>
+            </thead>
+            <tbody id="reResultsTableBody">
+            <!-- rows injected by JS -->
+            </tbody>
+          </table>
+        </div>
+
+        <h3 class="section-title" id="emiScheduleTitle" style="display:none;">
+          EMI Schedule (monthly)
+        </h3>
+        <div class="emi-wrapper" id="emiScheduleContainer" style="display:none;">
+          <table>
+            <thead>
+            <tr>
+              <th>Month #</th>
+              <th>Month-Year</th>
+              <th>Principal paid (₹)</th>
+              <th>Interest paid (₹)</th>
+              <th>Total EMI (₹)</th>
+              <th>Principal pending (₹)</th>
+              <th>% of principal paid</th>
+              <th>% of loan paid</th>
+            </tr>
+            </thead>
+            <tbody id="emiScheduleBody">
+            <!-- rows injected by JS -->
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -443,6 +610,12 @@
 </div>
 
 <script>
+  // ===== Common DOM refs =====
+  const tabs = document.querySelectorAll('.tab-btn');
+  const sipSection = document.getElementById('sipSection');
+  const reSection = document.getElementById('reSection');
+
+  // ===== SIP DOM refs =====
   const frequencySelect = document.getElementById('frequency');
   const tenureLabel = document.getElementById('tenureLabel');
   const errorBox = document.getElementById('errorBox');
@@ -457,13 +630,35 @@
   const summaryQtyLabelEl = document.getElementById('summaryQtyLabel');
   const summaryQtyValueEl = document.getElementById('summaryQty');
 
-  const tabs = document.querySelectorAll('.tab-btn');
+  // ===== Real Estate DOM refs =====
+  const reErrorBox = document.getElementById('reErrorBox');
+  const reResults = document.getElementById('reResults');
+  const rePrintBtn = document.getElementById('rePrintBtn');
+  const reTableBody = document.getElementById('reResultsTableBody');
+
+  const reSummarySavings = document.getElementById('reSummarySavings');
+  const reSummaryEmi = document.getElementById('reSummaryEmi');
+  const reSummaryPrincipal = document.getElementById('reSummaryPrincipal');
+  const reSummaryInterest = document.getElementById('reSummaryInterest');
+  const reSummaryLoanPayout = document.getElementById('reSummaryLoanPayout');
+  const reSummaryTotalOutflow = document.getElementById('reSummaryTotalOutflow');
+  const reSummaryRent = document.getElementById('reSummaryRent');
+  const reSummaryPropNominal = document.getElementById('reSummaryPropNominal');
+  const reSummaryPropReal = document.getElementById('reSummaryPropReal');
+
+  const emiScheduleTitle = document.getElementById('emiScheduleTitle');
+  const emiScheduleContainer = document.getElementById('emiScheduleContainer');
+  const emiScheduleBody = document.getElementById('emiScheduleBody');
 
   let currentAsset = 'gold';
   let qtySuffix = ' g';
 
   const tabState = { gold: {}, stock: {}, mf: {} };
 
+  // For EMI schedule
+  let reEmiSchedule = null;
+
+  // ===== SIP helpers for state =====
   function readFormState() {
     return {
       goldRate: document.getElementById('goldRate').value,
@@ -532,39 +727,64 @@
     updateGrowthLabel();
   }
 
-  // Tab switching
+  // ===== Tab switching =====
   tabs.forEach(tab => {
     tab.addEventListener('click', () => {
       const asset = tab.getAttribute('data-asset');
       if (asset === currentAsset) return;
 
-      tabState[currentAsset] = readFormState();
+      if (currentAsset !== 'realestate') {
+        tabState[currentAsset] = readFormState();
+      }
 
       currentAsset = asset;
+
       tabs.forEach(t => {
         t.classList.toggle('active', t.getAttribute('data-asset') === asset);
       });
 
-      applyAssetConfig();
-      applyFormState(tabState[asset] || {});
+      if (asset === 'realestate') {
+        sipSection.style.display = 'none';
+        reSection.style.display = '';
 
-      resultsContainer.style.display = 'none';
-      tableBody.innerHTML = '';
-      printBtn.style.display = 'none';
-      errorBox.style.display = 'none';
+        resultsContainer.style.display = 'none';
+        tableBody.innerHTML = '';
+        printBtn.style.display = 'none';
+        errorBox.style.display = 'none';
+      } else {
+        sipSection.style.display = '';
+        reSection.style.display = 'none';
+
+        applyAssetConfig();
+        applyFormState(tabState[asset] || {});
+        resultsContainer.style.display = 'none';
+        tableBody.innerHTML = '';
+        printBtn.style.display = 'none';
+        errorBox.style.display = 'none';
+      }
+
+      if (asset !== 'realestate') {
+        reResults.style.display = 'none';
+        reErrorBox.style.display = 'none';
+        reTableBody.innerHTML = '';
+        rePrintBtn.style.display = 'none';
+        emiScheduleTitle.style.display = 'none';
+        emiScheduleContainer.style.display = 'none';
+        emiScheduleBody.innerHTML = '';
+        reEmiSchedule = null;
+      }
     });
   });
 
-  // Frequency change: tenure label + growth label
   frequencySelect.addEventListener('change', () => {
     updateTenureLabel();
     updateGrowthLabel();
   });
 
-  // initial config
   applyAssetConfig();
   updateTenureLabel();
 
+  // ===== Formatting helpers =====
   function formatReadableIndian(value) {
     if (!isFinite(value)) return '0';
     const abs = Math.abs(value);
@@ -605,7 +825,10 @@
     });
   }
 
+  // ===== SIP calculator =====
   function calculatePlan() {
+    if (currentAsset === 'realestate') return;
+
     errorBox.style.display = 'none';
     errorBox.textContent = '';
     resultsContainer.style.display = 'none';
@@ -644,10 +867,10 @@
     let growthPerPeriod, growthAnnual;
 
     if (frequency === 'yearly') {
-      growthPerPeriod = growthInput;          // per year
+      growthPerPeriod = growthInput;
       growthAnnual = growthInput;
     } else {
-      growthPerPeriod = growthInput;          // per month
+      growthPerPeriod = growthInput;
       growthAnnual = Math.pow(1 + growthInput, 12) - 1;
     }
 
@@ -672,9 +895,7 @@
     let totalUnits = 0;
 
     for (let i = 0; i < periods; i++) {
-      const yearIndex = (frequency === 'yearly')
-        ? i
-        : Math.floor(i / 12);
+      const yearIndex = (frequency === 'yearly') ? i : Math.floor(i / 12);
 
       const contributionThisPeriod = plannedInvestment * Math.pow(1 + stepUp, yearIndex);
       const priceThisPeriod = basePrice * Math.pow(1 + growthPerPeriod, i);
@@ -700,9 +921,7 @@
         const tYears = (frequency === 'yearly') ? i : i / 12;
         if (tYears >= hYears - 1e-9) break;
 
-        const yearIndex = (frequency === 'yearly')
-          ? i
-          : Math.floor(i / 12);
+        const yearIndex = (frequency === 'yearly') ? i : Math.floor(i / 12);
 
         const contributionThisPeriod = plannedInvestment * Math.pow(1 + stepUp, yearIndex);
         const priceThisPeriod = basePrice * Math.pow(1 + growthPerPeriod, i);
@@ -771,6 +990,244 @@
 
     resultsContainer.style.display = 'block';
     printBtn.style.display = 'inline-flex';
+  }
+
+  // ===== Real Estate calculator =====
+  function calculateRealEstate() {
+    if (currentAsset !== 'realestate') return;
+
+    reErrorBox.style.display = 'none';
+    reErrorBox.textContent = '';
+    reResults.style.display = 'none';
+    reTableBody.innerHTML = '';
+    rePrintBtn.style.display = 'none';
+    reEmiSchedule = null;
+    emiScheduleTitle.style.display = 'none';
+    emiScheduleContainer.style.display = 'none';
+    emiScheduleBody.innerHTML = '';
+
+    const propertyValue = parseFloat(document.getElementById('rePropertyValue').value);
+    const investedSavings = parseFloat(document.getElementById('reInvestedSavings').value) || 0;
+    const loanAmount = parseFloat(document.getElementById('reLoanAmount').value) || 0;
+    const interestRate = parseFloat(document.getElementById('reInterestRate').value) || 0;
+    const loanTenureYears = parseInt(document.getElementById('reLoanTenure').value, 10);
+    const rentPerMonthInitial = parseFloat(document.getElementById('reRentPerMonth').value) || 0;
+    const rentIncrease = parseFloat(document.getElementById('reRentIncrease').value) || 0;
+    const inflPercent = parseFloat(document.getElementById('reInflation').value);
+    const appPercent = parseFloat(document.getElementById('reAppreciation').value);
+
+    if (!propertyValue || propertyValue <= 0 ||
+        !loanTenureYears || loanTenureYears <= 0 ||
+        isNaN(inflPercent) ||
+        isNaN(appPercent)) {
+      reErrorBox.textContent = 'Please fill property value, loan tenure, inflation & appreciation with valid numbers. Other fields can be 0 if not applicable.';
+      reErrorBox.style.display = 'block';
+      return;
+    }
+
+    const inflRate = inflPercent / 100;
+    const appRate = appPercent / 100;
+
+    let totalPrincipalPaid = 0;
+    let totalInterestPaid = 0;
+    let totalEmiPaid = 0;
+    const cumulativeEmiAtYear = {};
+    let approxFirstEmi = 0;
+    reEmiSchedule = [];
+
+    // ---- EMI schedule & totals (standard amortization) ----
+    if (loanAmount > 0) {
+      const nMonths = loanTenureYears * 12;
+      const monthlyRate = interestRate > 0 ? (interestRate / 100 / 12) : 0;
+
+      let emiBase;
+      if (monthlyRate > 0) {
+        const factor = Math.pow(1 + monthlyRate, nMonths);
+        emiBase = loanAmount * monthlyRate * factor / (factor - 1);
+      } else {
+        emiBase = loanAmount / nMonths;
+      }
+
+      let principalOutstanding = loanAmount;
+      let cumulativeEmi = 0;
+      let cumulativePrincipal = 0;
+
+      const startDate = new Date();
+      const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+      for (let m = 1; m <= nMonths; m++) {
+        const interestBase = principalOutstanding * monthlyRate;
+        let principalComponent;
+        let baseEmiThisMonth = emiBase;
+
+        if (monthlyRate > 0) {
+          principalComponent = baseEmiThisMonth - interestBase;
+          if (principalComponent > principalOutstanding) {
+            principalComponent = principalOutstanding;
+            baseEmiThisMonth = principalComponent + interestBase;
+          }
+        } else {
+          principalComponent = loanAmount / nMonths;
+          baseEmiThisMonth = principalComponent;
+        }
+
+        const interestTotal = interestBase;
+        const emiTotal = principalComponent + interestTotal;
+
+        principalOutstanding -= principalComponent;
+        if (principalOutstanding < 1e-6) principalOutstanding = 0;
+
+        cumulativeEmi += emiTotal;
+        cumulativePrincipal += principalComponent;
+
+        const yearIndex = Math.ceil(m / 12);
+        cumulativeEmiAtYear[yearIndex] = cumulativeEmi;
+
+        const d = new Date(startDate);
+        d.setMonth(d.getMonth() + (m - 1));
+        const periodLabel = `${monthNames[d.getMonth()]}-${d.getFullYear()}`;
+
+        reEmiSchedule.push({
+          month: m,
+          periodLabel,
+          principalPending: principalOutstanding,
+          principalPaid: principalComponent,
+          interestPaid: interestTotal,
+          emiTotal,
+          cumEmi: cumulativeEmi,
+          cumPrincipal: cumulativePrincipal
+        });
+
+        totalPrincipalPaid += principalComponent;
+        totalInterestPaid += interestTotal;
+        totalEmiPaid += emiTotal;
+      }
+
+      approxFirstEmi = reEmiSchedule.length > 0 ? reEmiSchedule[0].emiTotal : 0;
+    }
+
+    const totalLoanPayout = totalPrincipalPaid + totalInterestPaid;
+    const totalCashOutflow = investedSavings + totalLoanPayout;
+
+    reSummarySavings.textContent = formatCurrency(investedSavings);
+    reSummaryEmi.textContent = approxFirstEmi > 0 ? formatCurrency(approxFirstEmi) : '₹0';
+    reSummaryPrincipal.textContent = formatCurrency(totalPrincipalPaid);
+    reSummaryInterest.textContent = formatCurrency(totalInterestPaid);
+    reSummaryLoanPayout.textContent = formatCurrency(totalLoanPayout);
+    reSummaryTotalOutflow.textContent = formatCurrency(totalCashOutflow);
+
+    // ---- Rent (earned) ----
+    const rentIncRate = rentIncrease / 100;
+    const maxYears = 40;
+    const cumulativeRentAtYear = {};
+    let monthlyRent = rentPerMonthInitial;
+    let cumRent = 0;
+
+    for (let y = 1; y <= maxYears; y++) {
+      if (y === 1) {
+        monthlyRent = rentPerMonthInitial;
+      } else {
+        monthlyRent = monthlyRent * (1 + rentIncRate);
+      }
+      const annualRent = monthlyRent * 12;
+      cumRent += annualRent;
+      cumulativeRentAtYear[y] = cumRent;
+    }
+
+    const totalRentOverLoan = cumulativeRentAtYear[loanTenureYears] || 0;
+
+    // ---- Property appreciation ----
+    const propValueEndNominal = propertyValue * Math.pow(1 + appRate, loanTenureYears);
+    const propValueEndReal = propValueEndNominal / Math.pow(1 + inflRate, loanTenureYears);
+
+    reSummaryRent.textContent = formatCurrency(totalRentOverLoan);
+    reSummaryPropNominal.textContent = formatCurrency(propValueEndNominal);
+    reSummaryPropReal.textContent = formatCurrency(propValueEndReal);
+
+    // ---- Projections table ----
+    const horizons = [5, 10, 15, 20, 25, 30, 35, 40];
+    horizons.forEach(years => {
+      const y = years;
+
+      let loanPaidSoFar = 0;
+      if (loanAmount > 0) {
+        if (y >= loanTenureYears) {
+          loanPaidSoFar = totalEmiPaid;
+        } else {
+          loanPaidSoFar = cumulativeEmiAtYear[y] || 0;
+        }
+      }
+
+      const rentReceivedSoFar = cumulativeRentAtYear[y] || cumulativeRentAtYear[maxYears] || 0;
+
+      const assetValueNominal = propertyValue * Math.pow(1 + appRate, y);
+      const assetValueReal = assetValueNominal / Math.pow(1 + inflRate, y);
+
+      const tr = document.createElement('tr');
+      if (y === loanTenureYears) {
+        tr.classList.add('tenure-row');
+      }
+
+      const appendCell = (text) => {
+        const td = document.createElement('td');
+        td.textContent = text;
+        tr.appendChild(td);
+      };
+
+      appendCell(`${y} years`);
+      appendCell(formatCurrency(loanPaidSoFar));
+      appendCell(formatCurrency(rentReceivedSoFar));
+      appendCell(formatCurrency(assetValueNominal));
+      appendCell(formatCurrency(assetValueReal));
+
+      reTableBody.appendChild(tr);
+    });
+
+    // ---- EMI schedule table (only if loanAmount > 0) ----
+    if (loanAmount > 0 && reEmiSchedule && reEmiSchedule.length > 0) {
+      emiScheduleBody.innerHTML = '';
+
+      reEmiSchedule.forEach(row => {
+        const tr = document.createElement('tr');
+
+        const principalPct = loanAmount > 0
+          ? (row.cumPrincipal / loanAmount) * 100
+          : 0;
+
+        const loanPct = totalEmiPaid > 0
+          ? (row.cumEmi / totalEmiPaid) * 100
+          : 0;
+
+        const cells = [
+          row.month,
+          row.periodLabel,
+          formatCurrency(row.principalPaid),
+          formatCurrency(row.interestPaid),
+          formatCurrency(row.emiTotal),
+          formatCurrency(row.principalPending),
+          formatNumber(principalPct, 2) + ' %',
+          formatNumber(loanPct, 2) + ' %'
+        ];
+
+        cells.forEach(text => {
+          const td = document.createElement('td');
+          td.textContent = text;
+          tr.appendChild(td);
+        });
+
+        emiScheduleBody.appendChild(tr);
+      });
+
+      emiScheduleTitle.style.display = 'block';
+      emiScheduleContainer.style.display = 'block';
+    } else {
+      emiScheduleTitle.style.display = 'none';
+      emiScheduleContainer.style.display = 'none';
+      emiScheduleBody.innerHTML = '';
+    }
+
+    reResults.style.display = 'block';
+    rePrintBtn.style.display = 'inline-flex';
   }
 </script>
 </body>
